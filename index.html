@@ -3,219 +3,159 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RSMB PRO / WEB ENGINE</title>
+    <title>RSMB PRO / ULTRA BLUR</title>
     
-    <!-- Suporte para Multi-thread e Performance (Obrigatório no GitHub Pages) -->
     <script src="coi-serviceworker.js"></script>
     
     <style>
-        :root {
-            --bg: #000;
-            --ui-text: #666;
-            --accent: #fff;
-            --border: #222;
-        }
-
+        * { box-sizing: border-box; outline: none; }
         body { 
-            font-family: 'Inter', -apple-system, system-ui, sans-serif;
-            background: var(--bg); color: #fff; 
-            margin: 0; display: flex; flex-direction: column; align-items: center;
-            justify-content: center; min-height: 100vh;
-            -webkit-font-smoothing: antialiased;
+            margin: 0; background: #000; color: #fff; 
+            font-family: -apple-system, system-ui, sans-serif;
+            display: flex; flex-direction: column; height: 100vh;
         }
 
-        .container {
-            width: 100%; max-width: 360px; padding: 20px;
-            text-align: center;
+        nav {
+            padding: 30px 40px; display: flex;
+            justify-content: space-between; align-items: center;
         }
 
-        h1 { 
-            font-size: 10px; font-weight: 800; text-transform: uppercase; 
-            letter-spacing: 5px; margin-bottom: 60px; color: var(--ui-text); 
-        }
-
-        .control-group { margin-bottom: 35px; text-align: left; }
+        .logo { font-size: 11px; font-weight: 900; letter-spacing: 3px; color: #333; }
         
-        label { 
-            font-size: 9px; text-transform: uppercase; color: #444; 
-            letter-spacing: 2px; display: block; margin-bottom: 15px; 
-            font-weight: bold;
+        .btn {
+            background: none; border: 1px solid #222; color: #fff;
+            padding: 10px 20px; font-size: 10px; text-transform: uppercase;
+            letter-spacing: 1px; cursor: pointer; transition: 0.2s;
+        }
+        .btn:hover { border-color: #fff; }
+        .btn-render { background: #fff; color: #000; border: none; font-weight: bold; }
+
+        main {
+            flex: 1; display: flex; align-items: center;
+            justify-content: center; padding: 20px;
+        }
+        canvas, video { max-width: 100%; max-height: 80vh; border-radius: 4px; }
+
+        footer {
+            padding: 40px; display: flex; justify-content: center; gap: 50px;
+            background: #000;
         }
 
-        /* Estilo do Input de Arquivo */
-        input[type="file"] {
-            width: 100%; padding: 12px; background: #080808; 
-            border: 1px solid var(--border); color: #555; 
-            font-size: 9px; cursor: pointer; text-transform: uppercase;
+        .control { display: flex; flex-direction: column; width: 180px; }
+        label { font-size: 9px; text-transform: uppercase; letter-spacing: 2px; color: #444; margin-bottom: 15px; }
+        
+        input[type=range] {
+            -webkit-appearance: none; width: 100%; background: #111; height: 1px;
         }
-
-        /* Estilo Minimalista dos Sliders */
-        input[type="range"] {
-            width: 100%; height: 1px; background: #222; 
-            appearance: none; outline: none; margin: 10px 0;
-        }
-        input[type="range"]::-webkit-slider-thumb {
-            appearance: none; width: 10px; height: 10px; 
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; height: 12px; width: 12px;
             background: #fff; border-radius: 50%; cursor: pointer;
-            transition: 0.2s;
         }
-        input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
-
-        button {
-            width: 100%; padding: 18px; background: var(--accent); color: #000;
-            border: none; font-size: 10px; font-weight: 900; text-transform: uppercase;
-            letter-spacing: 3px; cursor: pointer; transition: 0.3s; margin-top: 30px;
-        }
-        button:hover { background: #ccc; }
-        button:disabled { background: #111; color: #333; cursor: not-allowed; }
 
         #status { 
-            font-size: 8px; text-transform: uppercase; margin-top: 25px; 
-            color: #444; letter-spacing: 1px; 
+            position: fixed; bottom: 120px; left: 50%; transform: translateX(-50%);
+            font-size: 9px; text-transform: uppercase; letter-spacing: 2px; color: #ff3b30;
         }
-        
-        video { 
-            width: 100%; margin-top: 40px; border: 1px solid var(--border); 
-            display: none; border-radius: 2px;
-        }
-
-        progress { 
-            width: 100%; height: 1px; margin-top: 15px; 
-            display: none; appearance: none; border: none;
-        }
-        progress::-webkit-progress-bar { background: #111; }
-        progress::-webkit-progress-value { background: var(--accent); }
-
-        .footer-info {
-            position: fixed; bottom: 20px; font-size: 8px; 
-            color: #222; text-transform: uppercase; letter-spacing: 1px;
-        }
+        progress { width: 200px; height: 1px; position: fixed; bottom: 110px; left: 50%; transform: translateX(-50%); appearance: none; border: none; background: #111; display: none; }
+        progress::-webkit-progress-value { background: #fff; }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <h1>RSMB PRO V1.0</h1>
-        
-        <div class="control-group">
-            <label>Source Footage</label>
-            <input type="file" id="uploader" accept="video/*" />
-        </div>
-
-        <div class="control-group">
-            <label>Blur Amount: <span id="val-blur" style="color: #fff">12</span></label>
-            <input type="range" id="blur" min="4" max="32" value="12">
-        </div>
-
-        <div class="control-group">
-            <label>Motion Smoothness: <span id="val-smooth" style="color: #fff">4</span></label>
-            <input type="range" id="smooth" min="1" max="10" value="4">
-        </div>
-
-        <button id="render-btn">Execute Render</button>
-        
-        <div id="status">System Standby</div>
-        <progress id="progress" value="0" max="100"></progress>
-        
-        <video id="outputVideo" controls playsinline></video>
+<nav>
+    <div class="logo">MOTION BLUR / RSMB V2</div>
+    <div style="display:flex; gap:15px">
+        <button class="btn" onclick="document.getElementById('fileIn').click()">Open</button>
+        <button class="btn btn-render" id="renderBtn">Render</button>
     </div>
+</nav>
 
-    <div class="footer-info">Powered by FFmpeg WebAssembly Core</div>
+<main>
+    <video id="outputVideo" controls playsinline></video>
+    <div id="status">Engine Ready</div>
+    <progress id="progress" value="0" max="100"></progress>
+</nav>
 
-    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
-    
-    <script>
-        const { createFFmpeg, fetchFile } = FFmpeg;
-        const ffmpeg = createFFmpeg({ 
-            log: false, // Log desativado para ganhar performance na UI
-            corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
+<footer>
+    <div class="control">
+        <label>Blur Intensity</label>
+        <input type="range" id="blur" min="4" max="24" value="12">
+    </div>
+    <div class="control">
+        <label>Motion Flow</label>
+        <input type="range" id="flow" min="1" max="10" value="5">
+    </div>
+</footer>
+
+<input type="file" id="fileIn" accept="video/*" style="display:none">
+
+<script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+
+<script>
+    const { createFFmpeg, fetchFile } = FFmpeg;
+    const ffmpeg = createFFmpeg({ 
+        log: true, 
+        corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
+    });
+
+    const renderBtn = document.getElementById('renderBtn');
+    const status = document.getElementById('status');
+    const prog = document.getElementById('progress');
+    const video = document.getElementById('outputVideo');
+
+    document.getElementById('fileIn').onchange = (e) => {
+        status.innerText = "Video Loaded";
+    };
+
+    renderBtn.onclick = async () => {
+        const file = document.getElementById('fileIn').files[0];
+        if (!file) return;
+
+        renderBtn.disabled = true;
+        
+        if (!ffmpeg.isLoaded()) {
+            status.innerText = "Booting Engine...";
+            await ffmpeg.load();
+        }
+
+        status.innerText = "Mounting Source...";
+        ffmpeg.FS('writeFile', 'in.mp4', await fetchFile(file));
+
+        ffmpeg.setProgress(({ ratio }) => {
+            prog.style.display = 'block';
+            prog.value = ratio * 100;
+            status.innerText = `Rendering: ${(ratio * 100).toFixed(0)}%`;
         });
 
-        // Atualização visual dos valores
-        document.getElementById('blur').oninput = (e) => document.getElementById('val-blur').innerText = e.target.value;
-        document.getElementById('smooth').oninput = (e) => document.getElementById('val-smooth').innerText = e.target.value;
+        const intensity = document.getElementById('blur').value;
+        
+        // A MÁGICA PARA TIRAR OS FANTASMAS:
+        // 1. minterpolate=fps=120 -> Cria frames intermediários para suavizar o rastro.
+        // 2. tmix -> Mistura esses novos frames.
+        // 3. scale -> Garante que o MP4 seja compatível.
+        const filter = `scale=trunc(iw/2)*2:trunc(ih/2)*2,minterpolate=fps=120:mi_mode=blend,tmix=frames=${intensity}:weights='1'`;
 
-        document.getElementById('render-btn').onclick = async () => {
-            const file = document.getElementById('uploader').files[0];
-            if (!file) return;
+        await ffmpeg.run(
+            '-i', 'in.mp4',
+            '-vf', filter,
+            '-c:v', 'libx264',
+            '-preset', 'ultrafast',
+            '-crf', '22',
+            '-pix_fmt', 'yuv420p',
+            'out.mp4'
+        );
 
-            const btn = document.getElementById('render-btn');
-            const status = document.getElementById('status');
-            const prog = document.getElementById('progress');
-            const video = document.getElementById('outputVideo');
+        const data = ffmpeg.FS('readFile', 'out.mp4');
+        video.src = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
+        video.style.display = "block";
+        status.innerText = "Complete";
+        prog.style.display = 'none';
+        renderBtn.disabled = false;
+        
+        ffmpeg.FS('unlink', 'in.mp4');
+        ffmpeg.FS('unlink', 'out.mp4');
+    };
+</script>
 
-            try {
-                btn.disabled = true;
-                video.style.display = "none";
-                
-                if (!ffmpeg.isLoaded()) {
-                    status.innerText = "Loading Core Engine...";
-                    await ffmpeg.load();
-                }
-
-                status.innerText = "Mounting Video...";
-                ffmpeg.FS('writeFile', 'input.mp4', await fetchFile(file));
-
-                ffmpeg.setProgress(({ ratio }) => {
-                    prog.style.display = 'block';
-                    prog.value = ratio * 100;
-                    status.innerText = `Processing: ${(ratio * 100).toFixed(0)}%`;
-                });
-
-                const intensity = parseInt(document.getElementById('blur').value);
-                const smooth = parseInt(document.getElementById('smooth').value);
-
-                // --- LÓGICA DE PESOS GAUSSIANOS PARA RSMB ---
-                // Criamos uma sequência de pesos: 1 2 3 4 5 4 3 2 1
-                // Isso faz com que o centro do rastro seja mais denso que as pontas.
-                let weights = [];
-                let mid = Math.ceil(intensity / 2);
-                for (let i = 1; i <= mid; i++) weights.push(i);
-                for (let i = mid - 1; i >= 1; i--) weights.push(i);
-                
-                // Se o número de pesos não bater com a intensidade, ajustamos
-                while(weights.length < intensity) weights.push(1);
-                const weightString = weights.join(' ');
-
-                // FILTRO DE RSMB PROFISSIONAL
-                // 1. scale: Força resolução par (obrigatório para MP4)
-                // 2. minterpolate: Suaviza o movimento entre os frames originais
-                // 3. tmix: Mistura os frames usando a curva de pesos Gaussianos
-                // 4. boxblur: Um leve desfoque espacial para "derreter" os rastros
-                const filter = [
-                    `scale=trunc(iw/2)*2:trunc(ih/2)*2`,
-                    `minterpolate=fps=60:mi_mode=blend`,
-                    `tmix=frames=${intensity}:weights='${weightString}'`,
-                    `boxblur=${smooth/2}:1`
-                ].join(',');
-
-                await ffmpeg.run(
-                    '-i', 'input.mp4',
-                    '-vf', filter,
-                    '-c:v', 'libx264',
-                    '-preset', 'ultrafast', // Focado em velocidade no navegador
-                    '-crf', '22',
-                    '-pix_fmt', 'yuv420p', // Formato de cor compatível com celulares
-                    'output.mp4'
-                );
-
-                const data = ffmpeg.FS('readFile', 'output.mp4');
-                const blob = new Blob([data.buffer], { type: 'video/mp4' });
-                video.src = URL.createObjectURL(blob);
-                video.style.display = "block";
-                status.innerText = "Render Successful";
-
-                // Limpeza de cache virtual
-                ffmpeg.FS('unlink', 'input.mp4');
-                ffmpeg.FS('unlink', 'output.mp4');
-
-            } catch (e) {
-                console.error(e);
-                status.innerText = "Error: Memory Exhausted or Unsupported Codec";
-            } finally {
-                btn.disabled = false;
-            }
-        };
-    </script>
 </body>
 </html>
