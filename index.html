@@ -3,188 +3,166 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RSMB v1.0</title>
+    <title>RSMB Pro - Web Engine</title>
+    
+    <!-- Necessário para Multi-thread no GitHub Pages -->
+    <script src="coi-serviceworker.js"></script>
+    
     <style>
-        * { box-sizing: border-box; outline: none; }
+        :root {
+            --bg: #000; --card: #111; --text: #fff; --primary: #fff;
+            --border: #222;
+        }
+
         body { 
-            margin: 0; 
-            background: #000; 
-            color: #fff; 
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
+            font-family: -apple-system, system-ui, sans-serif;
+            background: var(--bg); color: var(--text); 
+            margin: 0; display: flex; flex-direction: column; align-items: center;
+            justify-content: center; min-height: 100vh;
         }
 
-        /* Top Nav */
-        nav {
-            padding: 20px 40px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid #222;
+        .container {
+            width: 100%; max-width: 400px; padding: 40px 20px;
+            text-align: center;
         }
 
-        .logo { font-size: 14px; font-weight: 700; letter-spacing: 1px; color: #fff; }
+        h1 { font-size: 12px; text-transform: uppercase; letter-spacing: 4px; margin-bottom: 40px; color: #666; }
+
+        .control-group { margin-bottom: 30px; text-align: left; }
+        label { font-size: 10px; text-transform: uppercase; color: #444; letter-spacing: 1px; display: block; margin-bottom: 15px; }
+
+        input[type="file"] {
+            width: 100%; padding: 15px; background: #0a0a0a; border: 1px solid var(--border);
+            color: #444; font-size: 10px; cursor: pointer;
+        }
+
+        input[type="range"] {
+            width: 100%; height: 2px; background: #222; appearance: none; outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            appearance: none; width: 12px; height: 12px; background: #fff; border-radius: 50%; cursor: pointer;
+        }
+
+        button {
+            width: 100%; padding: 15px; background: #fff; color: #000;
+            border: none; font-size: 10px; font-weight: bold; text-transform: uppercase;
+            letter-spacing: 2px; cursor: pointer; transition: 0.3s; margin-top: 20px;
+        }
+        button:disabled { background: #222; color: #444; }
+
+        #status { font-size: 9px; text-transform: uppercase; margin-top: 20px; color: #ff3b30; letter-spacing: 1px; }
         
-        .actions { display: flex; gap: 20px; }
-        .btn {
-            background: none;
-            border: 1px solid #333;
-            color: #fff;
-            padding: 8px 16px;
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-        .btn:hover { border-color: #fff; background: #fff; color: #000; }
-        .btn-export { background: #fff; color: #000; border: 1px solid #fff; }
+        video { width: 100%; margin-top: 30px; border: 1px solid #222; display: none; }
 
-        /* Viewport */
-        main {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 40px;
-        }
-        canvas {
-            max-width: 100%;
-            max-height: 100%;
-            background: #050505;
-        }
-
-        /* Bottom Controls */
-        footer {
-            padding: 30px 40px;
-            border-top: 1px solid #222;
-            display: flex;
-            justify-content: center;
-            gap: 60px;
-        }
-
-        .control-group { display: flex; flex-direction: column; width: 200px; }
-        label { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: #666; margin-bottom: 15px; }
-        
-        input[type=range] {
-            -webkit-appearance: none;
-            width: 100%;
-            background: #222;
-            height: 2px;
-        }
-        input[type=range]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            height: 12px;
-            width: 12px;
-            background: #fff;
-            border-radius: 50%;
-            cursor: pointer;
-        }
-
-        #status { position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); font-size: 10px; color: #444; text-transform: uppercase; }
-
-        #fileIn { display: none; }
+        progress { width: 100%; height: 2px; margin-top: 10px; display: none; appearance: none; }
+        progress::-webkit-progress-bar { background: #111; }
+        progress::-webkit-progress-value { background: #fff; }
     </style>
 </head>
 <body>
 
-<nav>
-    <div class="logo">RSMB / WEB EDITION</div>
-    <div class="actions">
-        <button class="btn" onclick="document.getElementById('fileIn').click()">Open</button>
-        <button class="btn btn-export" id="btnExport">Export</button>
+    <div class="container">
+        <h1>RSMB Engine V1</h1>
+        
+        <div class="control-group">
+            <label>Select Footage</label>
+            <input type="file" id="uploader" accept="video/*" />
+        </div>
+
+        <div class="control-group">
+            <label>Motion Blur Intensity: <span id="val-blur">10</span></label>
+            <input type="range" id="blur" min="2" max="30" value="10">
+        </div>
+
+        <div class="control-group">
+            <label>Shutter Smoothness</label>
+            <input type="range" id="smooth" min="1" max="10" value="5">
+        </div>
+
+        <button id="render-btn">Start Rendering</button>
+        
+        <div id="status">Engine Ready</div>
+        <progress id="progress" value="0" max="100"></progress>
+        
+        <video id="outputVideo" controls playsinline></video>
     </div>
-</nav>
 
-<main>
-    <canvas id="canvas"></canvas>
-    <video id="vHidden" muted playsinline loop style="display:none"></video>
-</main>
-
-<div id="status">Ready</div>
-
-<footer>
-    <div class="control-group">
-        <label>Motion Intensity</label>
-        <input type="range" id="blur" min="0" max="0.95" step="0.01" value="0.5">
-    </div>
-    <div class="control-group">
-        <label>Motion Sensitivity</label>
-        <input type="range" id="sens" min="1" max="50" step="1" value="10">
-    </div>
-</footer>
-
-<input type="file" id="fileIn" accept="video/*">
-
-<script>
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d', { alpha: false });
-    const vHidden = document.getElementById('vHidden');
-    const status = document.getElementById('status');
-    const worker = new Worker('worker.js');
+    <!-- Carrega a biblioteca FFmpeg -->
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
     
-    let isProcessing = false;
-    let chunks = [];
+    <script>
+        const { createFFmpeg, fetchFile } = FFmpeg;
+        const ffmpeg = createFFmpeg({ 
+            log: true,
+            corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
+        });
 
-    document.getElementById('fileIn').onchange = (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        vHidden.src = URL.createObjectURL(file);
-        vHidden.onloadedmetadata = () => {
-            const scale = Math.min(1, 800 / vHidden.videoWidth);
-            canvas.width = vHidden.videoWidth * scale;
-            canvas.height = vHidden.videoHeight * scale;
-            vHidden.play();
-            status.innerText = "Processing Real-time";
-            render();
-        };
-    };
+        document.getElementById('blur').oninput = (e) => document.getElementById('val-blur').innerText = e.target.value;
 
-    function render() {
-        if (!vHidden.paused && !vHidden.ended && !isProcessing) {
-            isProcessing = true;
-            ctx.drawImage(vHidden, 0, 0, canvas.width, canvas.height);
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        document.getElementById('render-btn').onclick = async () => {
+            const file = document.getElementById('uploader').files[0];
+            if (!file) {
+                alert("Please select a video first.");
+                return;
+            }
 
-            worker.postMessage({
-                imageData,
-                settings: {
-                    blur: parseFloat(document.getElementById('blur').value),
-                    sensitivity: parseFloat(document.getElementById('sens').value)
+            const btn = document.getElementById('render-btn');
+            const status = document.getElementById('status');
+            const prog = document.getElementById('progress');
+            const video = document.getElementById('outputVideo');
+
+            try {
+                btn.disabled = true;
+                video.style.display = "none";
+                
+                if (!ffmpeg.isLoaded()) {
+                    status.innerText = "Booting Engine...";
+                    await ffmpeg.load();
                 }
-            }, [imageData.data.buffer]);
-        }
-        requestAnimationFrame(render);
-    }
 
-    worker.onmessage = (e) => {
-        ctx.putImageData(e.data.imageData, 0, 0);
-        isProcessing = false;
-    };
+                status.innerText = "Loading Video...";
+                ffmpeg.FS('writeFile', 'input.mp4', await fetchFile(file));
 
-    // Export Logic
-    document.getElementById('btnExport').onclick = () => {
-        status.innerText = "Recording...";
-        chunks = [];
-        const stream = canvas.captureStream(30);
-        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' });
+                ffmpeg.setProgress(({ ratio }) => {
+                    prog.style.display = 'block';
+                    prog.value = ratio * 100;
+                    status.innerText = `Rendering: ${(ratio * 100).toFixed(0)}%`;
+                });
 
-        recorder.ondataavailable = e => chunks.push(e.data);
-        recorder.onstop = () => {
-            const blob = new Blob(chunks, { type: 'video/webm' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = 'rsmb_render.webm';
-            a.click();
-            status.innerText = "Done";
+                const frames = document.getElementById('blur').value;
+                
+                // Lógica de RSMB via FFmpeg: tmix (Temporal Mix)
+                // O segredo do RSMB é a mistura de frames consecutivos para criar o rastro.
+                // scale=trunc(iw/2)*2... garante compatibilidade com players mobile.
+                const filter = `tmix=frames=${frames}:weights='1',scale=trunc(iw/2)*2:trunc(ih/2)*2`;
+
+                await ffmpeg.run(
+                    '-i', 'input.mp4',
+                    '-vf', filter,
+                    '-c:v', 'libx264',
+                    '-preset', 'ultrafast',
+                    '-crf', '23',
+                    '-pix_fmt', 'yuv420p',
+                    'output.mp4'
+                );
+
+                const data = ffmpeg.FS('readFile', 'output.mp4');
+                const blob = new Blob([data.buffer], { type: 'video/mp4' });
+                video.src = URL.createObjectURL(blob);
+                video.style.display = "block";
+                status.innerText = "Render Complete";
+
+                // Limpa memória virtual
+                ffmpeg.FS('unlink', 'input.mp4');
+                ffmpeg.FS('unlink', 'output.mp4');
+
+            } catch (e) {
+                console.error(e);
+                status.innerText = "Render Error: Check Console";
+            } finally {
+                btn.disabled = false;
+            }
         };
-
-        recorder.start();
-        setTimeout(() => recorder.stop(), vHidden.duration * 1000 || 5000);
-    };
-</script>
-
+    </script>
 </body>
 </html>
