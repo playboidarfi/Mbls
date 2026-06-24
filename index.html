@@ -2,234 +2,91 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Magic Bullet Web - Pro Edition</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web RSMB Pro</title>
     <style>
-        :root { --accent: #ff3e3e; --bg: #0a0a0a; --panel: #161616; }
-        body { margin: 0; background: var(--bg); color: #eee; font-family: -apple-system, sans-serif; overflow: hidden; display: flex; flex-direction: column; height: 100vh; }
-        
-        header { padding: 15px 20px; background: #000; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; z-index: 10; }
-        .logo { font-weight: 900; letter-spacing: 2px; color: var(--accent); }
-        
-        #viewer { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; background: #000; overflow: hidden; }
-        canvas { max-width: 100%; max-height: 100%; box-shadow: 0 0 40px rgba(0,0,0,0.5); background: #111; }
-
-        #controls { height: 35vh; background: var(--panel); border-top: 1px solid #333; display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 15px; padding: 15px; overflow-y: auto; }
-        
-        .group { display: flex; flex-direction: column; gap: 5px; }
-        label { font-size: 10px; text-transform: uppercase; color: #777; font-weight: bold; }
-        input[type=range] { width: 100%; accent-color: var(--accent); height: 25px; }
-
-        .btn { background: var(--accent); border: none; color: white; padding: 10px 18px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 12px; }
-        #status-bar { position: absolute; top: 10px; left: 10px; font-size: 10px; background: rgba(0,0,0,0.7); padding: 5px 10px; border-radius: 20px; pointer-events: none; }
+        body { margin: 0; background: #000; color: #fff; font-family: sans-serif; display: flex; flex-direction: column; height: 100vh; }
+        header { padding: 15px; background: #111; display: flex; justify-content: space-between; border-bottom: 2px solid #ff3e3e; }
+        #canvas-container { flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+        canvas { max-width: 100%; max-height: 100%; }
+        #controls { background: #111; padding: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .slider-box { display: flex; flex-direction: column; }
+        label { font-size: 11px; text-transform: uppercase; margin-bottom: 8px; color: #888; }
+        input[type=range] { accent-color: #ff3e3e; }
+        .btn { background: #ff3e3e; border: none; color: #fff; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; }
     </style>
 </head>
 <body>
 
 <header>
-    <div class="logo">LOOKS <span style="color:#fff">WEB</span></div>
-    <div style="display: flex; gap: 10px;">
-        <input type="file" id="fileIn" hidden accept="video/*,image/*">
-        <button class="btn" onclick="document.getElementById('fileIn').click()">ABRIR</button>
-        <button class="btn" id="btnRender" style="background:#27ae60">SALVAR</button>
-    </div>
+    <div style="font-weight: 900; letter-spacing: 2px;">RSMB <span style="color:#ff3e3e">WEB</span></div>
+    <input type="file" id="fileIn" hidden accept="video/*">
+    <button class="btn" onclick="document.getElementById('fileIn').click()">CARREGAR VÍDEO</button>
 </header>
 
-<div id="viewer">
-    <div id="status-bar">Aguardando mídia...</div>
-    <canvas id="canvas"></canvas>
+<div id="canvas-container">
+    <canvas id="mainCanvas"></canvas>
     <video id="vHidden" muted playsinline loop style="display:none"></video>
 </div>
 
 <div id="controls">
-    <div class="group">
-        <label>Exposure (Gain)</label>
-        <input type="range" id="gain" min="0" max="3" step="0.01" value="1">
-        <label>Shadows (Lift)</label>
-        <input type="range" id="lift" min="-0.5" max="0.5" step="0.01" value="0">
+    <div class="slider-box">
+        <label>Blur Amount (Intensidade)</label>
+        <input type="range" id="blurAmount" min="0" max="5" step="0.1" value="1.5">
     </div>
-    <div class="group">
-        <label>Gamma (Midtones)</label>
-        <input type="range" id="gamma" min="0.2" max="2.5" step="0.01" value="1">
-        <label>Halation (Glow)</label>
-        <input type="range" id="halation" min="0" max="1" step="0.01" value="0">
-    </div>
-    <div class="group">
-        <label>Vignette</label>
-        <input type="range" id="vignette" min="0" max="2" step="0.01" value="0">
-        <label>Saturation</label>
-        <input type="range" id="sat" min="0" max="2" step="0.01" value="1">
-    </div>
-    <div class="group">
-        <label>Tint Red</label>
-        <input type="range" id="tr" min="0.5" max="1.5" step="0.01" value="1">
-        <label>Tint Blue</label>
-        <input type="range" id="tb" min="0.5" max="1.5" step="0.01" value="1">
+    <div class="slider-box">
+        <label>Sensitivity (Detecção de Movimento)</label>
+        <input type="range" id="sensitivity" min="1" max="50" step="1" value="10">
     </div>
 </div>
 
 <script>
-    // --- CÓDIGO DO WORKER (EMBUTIDO) ---
-    const workerCode = `
-    self.onmessage = function(e) {
-        const { imageData, settings } = e.data;
-        const data = imageData.data;
-        const w = imageData.width;
-        const h = imageData.height;
-        const { gain, lift, gamma, halation, vignette, sat, tr, tb } = settings;
-
-        for (let i = 0; i < data.length; i += 4) {
-            let r = data[i] / 255;
-            let g = data[i + 1] / 255;
-            let b = data[i + 2] / 255;
-
-            // 1. Color Wheels (Lift, Gamma, Gain) + Tint
-            r = (r * gain * tr) * (1 - lift) + lift;
-            g = (g * gain) * (1 - lift) + lift;
-            b = (b * gain * tb) * (1 - lift) + lift;
-
-            r = Math.pow(Math.max(0, r), 1 / gamma);
-            g = Math.pow(Math.max(0, g), 1 / gamma);
-            b = Math.pow(Math.max(0, b), 1 / gamma);
-
-            // 2. Saturation
-            const gray = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-            r = gray + sat * (r - gray);
-            g = gray + sat * (g - gray);
-            b = gray + sat * (b - gray);
-
-            // 3. Halation
-            if (halation > 0) {
-                const lum = (r + g + b) / 3;
-                if (lum > 0.6) r += (lum - 0.6) * halation;
-            }
-
-            // 4. Vignette
-            if (vignette > 0) {
-                const idx = i / 4;
-                const x = (idx % w) / w - 0.5;
-                const y = (idx / w) / h - 0.5;
-                const d = Math.sqrt(x*x + y*y);
-                const v = Math.max(0, 1 - d * vignette);
-                r *= v; g *= v; b *= v;
-            }
-
-            data[i] = r * 255;
-            data[i+1] = g * 255;
-            data[i+2] = b * 255;
-        }
-        self.postMessage({ imageData }, [imageData.data.buffer]);
-    };
-    `;
-
-    // Inicialização do Worker via Blob
-    const blob = new Blob([workerCode], { type: 'application/javascript' });
-    const worker = new Worker(URL.createObjectURL(blob));
-
-    const canvas = document.getElementById('canvas');
+    const canvas = document.getElementById('mainCanvas');
     const ctx = canvas.getContext('2d', { alpha: false });
     const vHidden = document.getElementById('vHidden');
-    const statusBar = document.getElementById('status-bar');
+    const worker = new Worker('worker.js');
+    
     let isProcessing = false;
-    let isVideo = false;
 
-    // Carregar arquivo
     document.getElementById('fileIn').onchange = (e) => {
         const file = e.target.files[0];
-        if (!file) return;
-        
-        const url = URL.createObjectURL(file);
-        isVideo = file.type.startsWith('video');
-
-        if (isVideo) {
-            vHidden.src = url;
-            vHidden.onloadedmetadata = () => {
-                const scale = Math.min(1, 800 / vHidden.videoWidth);
-                canvas.width = vHidden.videoWidth * scale;
-                canvas.height = vHidden.videoHeight * scale;
-                vHidden.play();
-                statusBar.innerText = "Modo Vídeo (Multi-thread Ativo)";
-                requestAnimationFrame(loop);
-            };
-        } else {
-            const img = new Image();
-            img.onload = () => {
-                canvas.width = img.width;
-                canvas.height = img.height;
-                ctx.drawImage(img, 0, 0);
-                statusBar.innerText = "Modo Imagem";
-                applyEffects();
-            };
-            img.src = url;
-        }
+        vHidden.src = URL.createObjectURL(file);
+        vHidden.onloadedmetadata = () => {
+            // RSMB exige muito processamento, então limitamos a resolução de preview
+            const scale = Math.min(1, 640 / vHidden.videoWidth);
+            canvas.width = vHidden.videoWidth * scale;
+            canvas.height = vHidden.videoHeight * scale;
+            vHidden.play();
+            requestAnimationFrame(render);
+        };
     };
 
-    function getSettings() {
-        return {
-            gain: parseFloat(document.getElementById('gain').value),
-            lift: parseFloat(document.getElementById('lift').value),
-            gamma: parseFloat(document.getElementById('gamma').value),
-            halation: parseFloat(document.getElementById('halation').value),
-            vignette: parseFloat(document.getElementById('vignette').value),
-            sat: parseFloat(document.getElementById('sat').value),
-            tr: parseFloat(document.getElementById('tr').value),
-            tb: parseFloat(document.getElementById('tb').value)
-        };
-    }
-
-    function loop() {
-        if (!vHidden.paused && !isProcessing && isVideo) {
-            applyEffects();
-        }
-        requestAnimationFrame(loop);
-    }
-
-    function applyEffects() {
-        if (isProcessing) return;
-        isProcessing = true;
-
-        if (isVideo) {
+    function render() {
+        if (!vHidden.paused && !vHidden.ended && !isProcessing) {
+            isProcessing = true;
+            
+            // Pega o frame do vídeo
             ctx.drawImage(vHidden, 0, 0, canvas.width, canvas.height);
-        }
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        worker.postMessage({ imageData, settings: getSettings() }, [imageData.data.buffer]);
+            // Envia para o Worker calcular o Motion Blur
+            worker.postMessage({
+                imageData: imageData,
+                settings: {
+                    blurAmount: parseFloat(document.getElementById('blurAmount').value),
+                    sensitivity: parseFloat(document.getElementById('sensitivity').value)
+                }
+            }, [imageData.data.buffer]);
+        }
+        requestAnimationFrame(render);
     }
 
     worker.onmessage = (e) => {
+        // Desenha o frame processado com RSMB de volta no canvas
         ctx.putImageData(e.data.imageData, 0, 0);
         isProcessing = false;
     };
-
-    // Atualiza ao mexer nos sliders
-    document.querySelectorAll('input').forEach(i => i.oninput = () => {
-        if (!isVideo) applyEffects();
-    });
-
-    // Exportar
-    document.getElementById('btnRender').onclick = () => {
-        if (isVideo) {
-            const stream = canvas.captureStream(30);
-            const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
-            const chunks = [];
-            recorder.ondataavailable = e => chunks.push(e.data);
-            recorder.onstop = () => {
-                const b = new Blob(chunks, { type: 'video/webm' });
-                const a = document.createElement('a');
-                a.href = URL.createObjectURL(b);
-                a.download = 'render.webm';
-                a.click();
-            };
-            recorder.start();
-            setTimeout(() => recorder.stop(), vHidden.duration * 1000 || 5000);
-            alert("Renderizando... Aguarde alguns segundos.");
-        } else {
-            const a = document.createElement('a');
-            a.href = canvas.toDataURL('image/png');
-            a.download = 'look.png';
-            a.click();
-        }
-    };
 </script>
+
 </body>
 </html>
