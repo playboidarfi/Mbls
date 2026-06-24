@@ -1,41 +1,52 @@
 // worker.js
+let lastImageData = null;
+
 self.onmessage = function(e) {
-    const { imageData, settings, stripIndex } = e.data;
-    const data = imageData.data;
-    const len = data.length;
-
-    const { lift, gamma, gain, halation, vignette } = settings;
-
-    for (let i = 0; i < len; i += 4) {
-        let r = data[i] / 255;
-        let g = data[i + 1] / 255;
-        let b = data[i + 2] / 255;
-
-        // 1. Gain (Highlights) + Tint
-        r *= gain.r; g *= gain.g; b *= gain.b;
-
-        // 2. Lift (Shadows)
-        r = r * (1 - lift) + lift;
-        g = g * (1 - lift) + lift;
-        b = b * (1 - lift) + lift;
-
-        // 3. Gamma (Midtones)
-        r = Math.pow(Math.max(0, r), 1 / gamma);
-        g = Math.pow(Math.max(0, g), 1 / gamma);
-        b = Math.pow(Math.max(0, b), 1 / gamma);
-
-        // 4. Simple Halation
-        if (halation > 0) {
-            let lum = (r + g + b) / 3;
-            if (lum > 0.7) r += (lum - 0.7) * halation;
-        }
-
-        // Saída (Clamp 0-255)
-        data[i] = r * 255;
-        data[i + 1] = g * 255;
-        data[i + 2] = b * 255;
+    const { imageData, settings } = e.data;
+    const curr = imageData.data;
+    const w = imageData.width;
+    const h = imageData.height;
+    
+    // Se não tiver o frame anterior, pula a renderização deste
+    if (!lastImageData) {
+        lastImageData = new Uint8ClampedArray(curr);
+        self.postMessage({ imageData });
+        return;
     }
 
-    // Devolve a fatia processada
-    self.postMessage({ imageData, stripIndex }, [imageData.data.buffer]);
+    const prev = lastImageData;
+    const output = new Uint8ClampedArray(curr);
+    
+    const blurAmount = settings.blurAmount; // Intensidade do RSMB
+    const sensitivity = settings.sensitivity; // Sensibilidade ao movimento
+
+    for (let i = 0; i < curr.length; i += 4) {
+        // Calcula a diferença de movimento entre frames (Optical Flow simplificado)
+        const diffR = Math.abs(curr[i] - prev[i]);
+        const diffG = Math.abs(curr[i+1] - prev[i+1]);
+        const diffB = Math.abs(curr[i+2] - prev[i+2]);
+        const motion = (diffR + diffG + diffB) / 3;
+
+        if (motion > sensitivity) {
+            // Se houver movimento, mistura o frame atual com o anterior
+            // Criando o efeito de "Motion Blur" direcional
+            const alpha = Math.min(0.9, (motion / 255) * blurAmount);
+            
+            output[i]     = curr[i]     * (1 - alpha) + prev[i]     * alpha;
+            output[i + 1] = curr[i + 1] * (1 - alpha) + prev[i + 1] * alpha;
+            output[i + 2] = curr[i + 2] * (1 - alpha) + prev[i + 2] * alpha;
+        } else {
+            output[i]     = curr[i];
+            output[i + 1] = curr[i + 1];
+            output[i + 2] = curr[i + 2];
+        }
+        output[i + 3] = 255;
+    }
+
+    // Salva o frame atual para comparar com o próximo
+    lastImageData.set(curr);
+
+    self.postMessage({ 
+        imageData: new ImageData(output, w, h) 
+    });
 };
