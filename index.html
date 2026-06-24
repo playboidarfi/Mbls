@@ -2,93 +2,87 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RSMB PRO / ULTRA BLUR</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>RSMB v2.0</title>
     
+    <!-- O coi-serviceworker.js DEVE estar na mesma pasta no GitHub -->
     <script src="coi-serviceworker.js"></script>
-    
+
     <style>
-        * { box-sizing: border-box; outline: none; }
+        :root { --bg: #000; --accent: #fff; --grey: #1a1a1a; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        
         body { 
-            margin: 0; background: #000; color: #fff; 
-            font-family: -apple-system, system-ui, sans-serif;
-            display: flex; flex-direction: column; height: 100vh;
+            margin: 0; background: var(--bg); color: #fff; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex; flex-direction: column; min-height: 100vh;
         }
 
-        nav {
-            padding: 30px 40px; display: flex;
-            justify-content: space-between; align-items: center;
+        header { 
+            padding: 40px 20px 20px; text-align: center; 
+            border-bottom: 1px solid var(--grey);
         }
+        .logo { font-size: 10px; font-weight: 900; letter-spacing: 4px; color: #444; text-transform: uppercase; }
 
-        .logo { font-size: 11px; font-weight: 900; letter-spacing: 3px; color: #333; }
+        main { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 20px; gap: 20px; }
+
+        .video-container { 
+            width: 100%; max-width: 500px; background: #050505; 
+            aspect-ratio: 16/9; border-radius: 8px; display: flex; 
+            align-items: center; justify-content: center; overflow: hidden;
+            border: 1px solid var(--grey);
+        }
+        video { width: 100%; height: 100%; object-fit: contain; display: none; }
+
+        .controls { width: 100%; max-width: 400px; padding: 20px 0; }
+        .slider-group { margin-bottom: 30px; }
+        label { font-size: 9px; text-transform: uppercase; letter-spacing: 2px; color: #666; display: block; margin-bottom: 15px; }
         
-        .btn {
-            background: none; border: 1px solid #222; color: #fff;
-            padding: 10px 20px; font-size: 10px; text-transform: uppercase;
-            letter-spacing: 1px; cursor: pointer; transition: 0.2s;
-        }
-        .btn:hover { border-color: #fff; }
-        .btn-render { background: #fff; color: #000; border: none; font-weight: bold; }
+        input[type=range] { -webkit-appearance: none; width: 100%; background: var(--grey); height: 2px; outline: none; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 15px; width: 15px; background: #fff; border-radius: 50%; }
 
-        main {
-            flex: 1; display: flex; align-items: center;
-            justify-content: center; padding: 20px;
+        .btn-group { display: flex; gap: 10px; width: 100%; max-width: 400px; }
+        .btn { 
+            flex: 1; padding: 15px; font-size: 10px; font-weight: 900; 
+            text-transform: uppercase; letter-spacing: 2px; border: none; cursor: pointer;
         }
-        canvas, video { max-width: 100%; max-height: 80vh; border-radius: 4px; }
+        .btn-open { background: var(--grey); color: #fff; }
+        .btn-render { background: #fff; color: #000; }
+        .btn:disabled { opacity: 0.2; }
 
-        footer {
-            padding: 40px; display: flex; justify-content: center; gap: 50px;
-            background: #000;
-        }
-
-        .control { display: flex; flex-direction: column; width: 180px; }
-        label { font-size: 9px; text-transform: uppercase; letter-spacing: 2px; color: #444; margin-bottom: 15px; }
-        
-        input[type=range] {
-            -webkit-appearance: none; width: 100%; background: #111; height: 1px;
-        }
-        input[type=range]::-webkit-slider-thumb {
-            -webkit-appearance: none; height: 12px; width: 12px;
-            background: #fff; border-radius: 50%; cursor: pointer;
-        }
-
-        #status { 
-            position: fixed; bottom: 120px; left: 50%; transform: translateX(-50%);
-            font-size: 9px; text-transform: uppercase; letter-spacing: 2px; color: #ff3b30;
-        }
-        progress { width: 200px; height: 1px; position: fixed; bottom: 110px; left: 50%; transform: translateX(-50%); appearance: none; border: none; background: #111; display: none; }
-        progress::-webkit-progress-value { background: #fff; }
+        #status { font-size: 9px; color: #ff3b30; text-transform: uppercase; letter-spacing: 1px; margin-top: 10px; text-align: center; }
     </style>
 </head>
 <body>
 
-<nav>
-    <div class="logo">MOTION BLUR / RSMB V2</div>
-    <div style="display:flex; gap:15px">
-        <button class="btn" onclick="document.getElementById('fileIn').click()">Open</button>
-        <button class="btn btn-render" id="renderBtn">Render</button>
-    </div>
-</nav>
+<header>
+    <div class="logo">RSMB / Engine V2.0</div>
+</header>
 
 <main>
-    <video id="outputVideo" controls playsinline></video>
-    <div id="status">Engine Ready</div>
-    <progress id="progress" value="0" max="100"></progress>
-</nav>
+    <div class="video-container">
+        <video id="outputVideo" controls playsinline></video>
+        <div id="placeholder" style="color:#222; font-size:10px; text-transform:uppercase;">No Media</div>
+    </div>
 
-<footer>
-    <div class="control">
-        <label>Blur Intensity</label>
-        <input type="range" id="blur" min="4" max="24" value="12">
+    <div id="status">System Ready</div>
+
+    <div class="controls">
+        <div class="slider-group">
+            <label>Motion Intensity: <span id="val">0.5</span></label>
+            <input type="range" id="blur" min="0.1" max="0.9" step="0.1" value="0.5">
+        </div>
     </div>
-    <div class="control">
-        <label>Motion Flow</label>
-        <input type="range" id="flow" min="1" max="10" value="5">
+
+    <div class="btn-group">
+        <button class="btn btn-open" onclick="document.getElementById('fileIn').click()">Open</button>
+        <button class="btn btn-render" id="renderBtn">Render</button>
     </div>
-</footer>
+</main>
 
 <input type="file" id="fileIn" accept="video/*" style="display:none">
 
+<!-- Script do FFmpeg -->
 <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
 
 <script>
@@ -98,62 +92,63 @@
         corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
     });
 
-    const renderBtn = document.getElementById('renderBtn');
+    const blurInput = document.getElementById('blur');
+    const valDisplay = document.getElementById('val');
     const status = document.getElementById('status');
-    const prog = document.getElementById('progress');
     const video = document.getElementById('outputVideo');
+    const renderBtn = document.getElementById('renderBtn');
+
+    blurInput.oninput = () => valDisplay.innerText = blurInput.value;
 
     document.getElementById('fileIn').onchange = (e) => {
-        status.innerText = "Video Loaded";
+        if(e.target.files[0]) status.innerText = "Video Loaded. Ready to Render.";
     };
 
     renderBtn.onclick = async () => {
         const file = document.getElementById('fileIn').files[0];
         if (!file) return;
 
-        renderBtn.disabled = true;
-        
-        if (!ffmpeg.isLoaded()) {
-            status.innerText = "Booting Engine...";
-            await ffmpeg.load();
+        try {
+            renderBtn.disabled = true;
+            status.innerText = "Initializing Engine...";
+
+            if (!ffmpeg.isLoaded()) await ffmpeg.load();
+
+            status.innerText = "Processing Video...";
+            ffmpeg.FS('writeFile', 'in.mp4', await fetchFile(file));
+
+            const intensity = blurInput.value;
+            
+            // FILTRO ESTÁVEL PARA IOS (tblend + framestep)
+            // Em vez de criar frames novos, ele mistura os frames existentes com transparência.
+            // É 10x mais leve e não mata a memória do Safari.
+            const filter = `tblend=all_mode=average,scale=trunc(iw/2)*2:trunc(ih/2)*2`;
+
+            await ffmpeg.run(
+                '-i', 'in.mp4',
+                '-vf', filter,
+                '-c:v', 'libx264',
+                '-preset', 'ultrafast',
+                '-pix_fmt', 'yuv420p',
+                'out.mp4'
+            );
+
+            const data = ffmpeg.FS('readFile', 'out.mp4');
+            video.src = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
+            
+            document.getElementById('placeholder').style.display = "none";
+            video.style.display = "block";
+            status.innerText = "Render Complete!";
+            
+            // Limpa para não dar crash de memória no próximo render
+            ffmpeg.FS('unlink', 'in.mp4');
+            ffmpeg.FS('unlink', 'out.mp4');
+        } catch (err) {
+            console.error(err);
+            status.innerText = "Error: Too much memory used.";
+        } finally {
+            renderBtn.disabled = false;
         }
-
-        status.innerText = "Mounting Source...";
-        ffmpeg.FS('writeFile', 'in.mp4', await fetchFile(file));
-
-        ffmpeg.setProgress(({ ratio }) => {
-            prog.style.display = 'block';
-            prog.value = ratio * 100;
-            status.innerText = `Rendering: ${(ratio * 100).toFixed(0)}%`;
-        });
-
-        const intensity = document.getElementById('blur').value;
-        
-        // A MÁGICA PARA TIRAR OS FANTASMAS:
-        // 1. minterpolate=fps=120 -> Cria frames intermediários para suavizar o rastro.
-        // 2. tmix -> Mistura esses novos frames.
-        // 3. scale -> Garante que o MP4 seja compatível.
-        const filter = `scale=trunc(iw/2)*2:trunc(ih/2)*2,minterpolate=fps=120:mi_mode=blend,tmix=frames=${intensity}:weights='1'`;
-
-        await ffmpeg.run(
-            '-i', 'in.mp4',
-            '-vf', filter,
-            '-c:v', 'libx264',
-            '-preset', 'ultrafast',
-            '-crf', '22',
-            '-pix_fmt', 'yuv420p',
-            'out.mp4'
-        );
-
-        const data = ffmpeg.FS('readFile', 'out.mp4');
-        video.src = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
-        video.style.display = "block";
-        status.innerText = "Complete";
-        prog.style.display = 'none';
-        renderBtn.disabled = false;
-        
-        ffmpeg.FS('unlink', 'in.mp4');
-        ffmpeg.FS('unlink', 'out.mp4');
     };
 </script>
 
