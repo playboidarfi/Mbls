@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Magic Bullet Web Pro</title>
+    <style>
+        :root { --accent: #ff3e3e; --bg: #111; }
+        body { margin: 0; background: var(--bg); color: #ccc; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; flex-direction: column; height: 100vh; }
+        
+        header { padding: 10px 20px; background: #000; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; }
+        
+        #viewer { flex: 1; position: relative; display: flex; align-items: center; justify-content: center; background: #050505; }
+        canvas { max-width: 95%; max-height: 95%; box-shadow: 0 0 50px rgba(0,0,0,0.8); }
+
+        #toolbar { height: 250px; background: #181818; border-top: 1px solid #333; display: flex; padding: 20px; gap: 30px; overflow-x: auto; }
+        
+        .wheel-ui { display: flex; flex-direction: column; align-items: center; min-width: 120px; }
+        .wheel-circle { width: 80px; height: 80px; border-radius: 50%; background: conic-gradient(red, yellow, lime, aqua, blue, magenta, red); margin-bottom: 10px; border: 2px solid #444; }
+        
+        .control-block { min-width: 150px; }
+        label { font-size: 10px; text-transform: uppercase; color: #777; display: block; margin-bottom: 10px; }
+        input[type=range] { width: 100%; margin-bottom: 15px; accent-color: var(--accent); }
+
+        .btn-main { background: var(--accent); border: none; color: white; padding: 10px 20px; border-radius: 3px; cursor: pointer; font-weight: bold; }
+        #render-progress { position: absolute; bottom: 10px; left: 10px; font-size: 12px; color: var(--accent); display: none; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div style="font-weight: 900; letter-spacing: 2px;">LOOKS <span style="color:var(--accent)">WEB</span></div>
+    <div>
+        <input type="file" id="fileIn" hidden accept="video/*,image/*">
+        <button class="btn-main" onclick="document.getElementById('fileIn').click()">IMPORTAR</button>
+        <button class="btn-main" id="btnExport" style="background:#2ecc71">RENDERIZAR VÍDEO</button>
+    </div>
+</header>
+
+<div id="viewer">
+    <canvas id="canvas"></canvas>
+    <div id="render-progress">PROCESSANDO: <span id="percent">0</span>%</div>
+    <video id="vHidden" loop muted playsinline style="display:none"></video>
+</div>
+
+<div id="toolbar">
+    <!-- Simulação de Color Wheels em Sliders para precisão mobile -->
+    <div class="control-block">
+        <label>Lift (Pretos)</label>
+        <input type="range" id="lift" min="-0.2" max="0.5" step="0.01" value="0">
+        <label>Gamma (Médios)</label>
+        <input type="range" id="gamma" min="0.5" max="2.0" step="0.01" value="1.0">
+        <label>Gain (Brancos)</label>
+        <input type="range" id="gain" min="0.5" max="2.0" step="0.01" value="1.0">
+    </div>
+
+    <div class="control-block">
+        <label>Halation (Glow)</label>
+        <input type="range" id="halation" min="0" max="1" step="0.01" value="0.2">
+        <label>Vignette</label>
+        <input type="range" id="vignette" min="0" max="1.5" step="0.01" value="0.5">
+    </div>
+
+    <div class="control-block">
+        <label>Tint R/G/B</label>
+        <input type="range" id="tintR" min="0.8" max="1.2" step="0.01" value="1.0">
+        <input type="range" id="tintG" min="0.8" max="1.2" step="0.01" value="1.0">
+        <input type="range" id="tintB" min="0.8" max="1.2" step="0.01" value="1.0">
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d', {willReadFrequently: true});
+    const vHidden = document.getElementById('vHidden');
+    const worker = new Worker('processor.js');
+    let isProcessing = false;
+
+    // Listener de Importação
+    document.getElementById('fileIn').onchange = (e) => {
+        const file = e.target.files[0];
+        vHidden.src = URL.createObjectURL(file);
+        vHidden.onloadedmetadata = () => {
+            canvas.width = vHidden.videoWidth / 2; // Preview em 50% para fluidez
+            canvas.height = vHidden.videoHeight / 2;
+            vHidden.play();
+            requestAnimationFrame(renderLoop);
+        };
+    };
+
+    function getSettings() {
+        return {
+            lift: { r: parseFloat(lift.value), g: parseFloat(lift.value), b: parseFloat(lift.value) },
+            gamma: { r: parseFloat(gamma.value), g: parseFloat(gamma.value), b: parseFloat(gamma.value) },
+            gain: { 
+                r: parseFloat(gain.value) * parseFloat(tintR.value), 
+                g: parseFloat(gain.value) * parseFloat(tintG.value), 
+                b: parseFloat(gain.value) * parseFloat(tintB.value) 
+            },
+            halation: parseFloat(halation.value),
+            vignette: parseFloat(vignette.value)
+        };
+    }
+
+    function renderLoop() {
+        if (!vHidden.paused && !isProcessing) {
+            isProcessing = true;
+            ctx.drawImage(vHidden, 0, 0, canvas.width, canvas.height);
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            worker.postMessage({ imageData, settings: getSettings() }, [imageData.data.buffer]);
+        }
+        requestAnimationFrame(renderLoop);
+    }
+
+    worker.onmessage = (e) => {
+        ctx.putImageData(e.data.imageData, 0, 0);
+        isProcessing = false;
+    };
+
+    // --- LÓGICA DE EXPORTAÇÃO (RENDER REAL) ---
+    document.getElementById('btnExport').onclick = async () => {
+        const stream = canvas.captureStream(30);
+        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' });
+        const chunks = [];
+        
+        recorder.ondataavailable = e => chunks.push(e.data);
+        recorder.onstop = () => {
+            const blob = new Blob(chunks, { type: 'video/webm' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = 'magic_look_render.webm'; a.click();
+            document.getElementById('render-progress').style.display = 'none';
+        };
+
+        // Ajusta para Full Res no Render
+        canvas.width = vHidden.videoWidth;
+        canvas.height = vHidden.videoHeight;
+        
+        document.getElementById('render-progress').style.display = 'block';
+        vHidden.currentTime = 0;
+        recorder.start();
+        
+        vHidden.onended = () => recorder.stop();
+    };
+</script>
+</body>
+</html>
