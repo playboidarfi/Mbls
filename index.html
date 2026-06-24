@@ -1,87 +1,163 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Magic Bullet Ultra - MultiThread</title>
+    <style>
+        body { margin: 0; background: #050505; color: white; font-family: sans-serif; overflow: hidden; }
+        #app { display: flex; flex-direction: column; height: 100vh; }
+        header { padding: 15px; background: #000; display: flex; justify-content: space-between; border-bottom: 1px solid #333; }
+        #viewport { flex: 1; display: flex; align-items: center; justify-content: center; background: radial-gradient(#111, #000); }
+        canvas { max-width: 100%; max-height: 100%; border: 1px solid #222; }
+        #controls { height: 280px; background: #111; padding: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; overflow-y: auto; }
+        .control-group { display: flex; flex-direction: column; }
+        label { font-size: 10px; color: #666; text-transform: uppercase; margin-bottom: 5px; }
+        input[type=range] { width: 100%; accent-color: #ff3e3e; }
+        .status { font-size: 10px; color: #444; margin-top: 5px; }
+        .btn { background: #ff3e3e; border: none; color: white; padding: 8px 16px; border-radius: 4px; font-weight: bold; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    <header>
+        <div style="font-weight: 900; color: #ff3e3e;">MAGIC LOOKS <span style="color:#fff">WEB</span></div>
+        <div>
+            <input type="file" id="fileIn" hidden accept="video/*,image/*">
+            <button class="btn" onclick="document.getElementById('fileIn').click()">UPLOAD</button>
+            <button class="btn" id="btnExport" style="background:#27ae60">EXPORTAR</button>
+        </div>
+    </header>
+
+    <div id="viewport">
+        <canvas id="mainCanvas"></canvas>
+        <video id="vHidden" muted playsinline loop style="display:none"></video>
+    </div>
+
+    <div id="controls">
+        <div class="control-group">
+            <label>Exposure / Gain</label>
+            <input type="range" id="gain" min="0" max="3" step="0.05" value="1">
+            <label>Shadows / Lift</label>
+            <input type="range" id="lift" min="-0.2" max="0.3" step="0.01" value="0">
+            <label>Midtones / Gamma</label>
+            <input type="range" id="gamma" min="0.5" max="2" step="0.05" value="1">
+        </div>
+        <div class="control-group">
+            <label>Tint Red</label>
+            <input type="range" id="tRed" min="0.5" max="1.5" step="0.01" value="1">
+            <label>Tint Green</label>
+            <input type="range" id="tGreen" min="0.5" max="1.5" step="0.01" value="1">
+            <label>Tint Blue</label>
+            <input type="range" id="tBlue" min="0.5" max="1.5" step="0.01" value="1">
+        </div>
+        <div class="control-group">
+            <label>Halation (Glow)</label>
+            <input type="range" id="halation" min="0" max="1" step="0.05" value="0">
+            <div class="status" id="threadInfo">Threads: Detectando...</div>
+        </div>
+    </div>
+</div>
+
 <script>
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d', { alpha: false, willReadFrequently: true });
+    const canvas = document.getElementById('mainCanvas');
+    const ctx = canvas.getContext('2d', { alpha: false });
     const vHidden = document.getElementById('vHidden');
-    const fileIn = document.getElementById('fileIn');
-    
-    let worker;
-    try {
-        worker = new Worker('processor.js');
-    } catch (e) {
-        alert("Erro ao carregar o processador. Certifique-se de estar usando um servidor (GitHub Pages ou Local Server).");
+    const threadInfo = document.getElementById('threadInfo');
+
+    // CONFIGURAÇÃO DO POOL DE WORKERS (MULTI-THREAD)
+    const numThreads = navigator.hardwareConcurrency || 4;
+    const workers = [];
+    threadInfo.innerText = `Threads Ativas: ${numThreads} (Aceleração de Hardware)`;
+
+    for (let i = 0; i < numThreads; i++) {
+        workers.push(new Worker('worker.js'));
     }
 
     let isProcessing = false;
+    let finishedStrips = 0;
 
-    fileIn.onchange = (e) => {
+    document.getElementById('fileIn').onchange = (e) => {
         const file = e.target.files[0];
-        if (!file) return;
-        const url = URL.createObjectURL(file);
-        vHidden.src = url;
+        if(!file) return;
+        vHidden.src = URL.createObjectURL(file);
         vHidden.onloadedmetadata = () => {
-            // No mobile, o 4k trava. Usamos 720p para o preview.
-            const aspect = vHidden.videoWidth / vHidden.videoHeight;
-            canvas.width = 720;
-            canvas.height = 720 / aspect;
+            // Ajuste de resolução para mobile (Preview em 720p ou menos para não travar)
+            const scale = Math.min(1, 1280 / vHidden.videoWidth);
+            canvas.width = vHidden.videoWidth * scale;
+            canvas.height = vHidden.videoHeight * scale;
             vHidden.play();
-            requestAnimationFrame(renderLoop);
+            requestAnimationFrame(processLoop);
         };
     };
 
-    function renderLoop() {
+    function processLoop() {
         if (!vHidden.paused && !vHidden.ended && !isProcessing) {
-            isProcessing = true;
-            
-            // Desenha o frame original
-            ctx.drawImage(vHidden, 0, 0, canvas.width, canvas.height);
-            
-            // Pega os dados
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            
-            // Captura os valores dos sliders
-            const settings = {
-                lift: parseFloat(document.getElementById('lift').value),
-                gamma: parseFloat(document.getElementById('gamma').value),
-                gain: parseFloat(document.getElementById('gain').value),
-                halation: parseFloat(document.getElementById('halation').value),
-                vignette: parseFloat(document.getElementById('vignette').value),
-                gain: {
-                    r: parseFloat(document.getElementById('gain').value) * parseFloat(document.getElementById('tintR').value),
-                    g: parseFloat(document.getElementById('gain').value) * parseFloat(document.getElementById('tintG').value),
-                    b: parseFloat(document.getElementById('gain').value) * parseFloat(document.getElementById('tintB').value)
-                }
-            };
-
-            worker.postMessage({ imageData, settings }, [imageData.data.buffer]);
+            dispatchToWorkers();
         }
-        requestAnimationFrame(renderLoop);
+        requestAnimationFrame(processLoop);
     }
 
-    worker.onmessage = (e) => {
-        ctx.putImageData(e.data.imageData, 0, 0);
-        isProcessing = false;
-    };
+    function dispatchToWorkers() {
+        isProcessing = true;
+        finishedStrips = 0;
 
-    // Forçar atualização quando mexer nos sliders (mesmo com vídeo parado)
-    document.querySelectorAll('input[type=range]').forEach(input => {
-        input.addEventListener('input', () => {
-            if (vHidden.paused && !isProcessing) {
-                isProcessing = true;
-                ctx.drawImage(vHidden, 0, 0, canvas.width, canvas.height);
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                worker.postMessage({ imageData, settings: {
-                    lift: parseFloat(document.getElementById('lift').value),
-                    gamma: parseFloat(document.getElementById('gamma').value),
-                    gain: parseFloat(document.getElementById('gain').value),
-                    halation: parseFloat(document.getElementById('halation').value),
-                    vignette: parseFloat(document.getElementById('vignette').value),
-                    gain: {
-                        r: parseFloat(document.getElementById('gain').value) * parseFloat(document.getElementById('tintR').value),
-                        g: parseFloat(document.getElementById('gain').value) * parseFloat(document.getElementById('tintG').value),
-                        b: parseFloat(document.getElementById('gain').value) * parseFloat(document.getElementById('tintB').value)
-                    }
-                }}, [imageData.data.buffer]);
-            }
-        });
-    });
+        // Desenha frame original no canvas
+        ctx.drawImage(vHidden, 0, 0, canvas.width, canvas.height);
+        
+        const settings = {
+            gain: {
+                r: parseFloat(document.getElementById('gain').value) * parseFloat(document.getElementById('tRed').value),
+                g: parseFloat(document.getElementById('gain').value) * parseFloat(document.getElementById('tGreen').value),
+                b: parseFloat(document.getElementById('gain').value) * parseFloat(document.getElementById('tBlue').value)
+            },
+            lift: parseFloat(document.getElementById('lift').value),
+            gamma: parseFloat(document.getElementById('gamma').value),
+            halation: parseFloat(document.getElementById('halation').value)
+        };
+
+        const stripHeight = Math.floor(canvas.height / numThreads);
+
+        for (let i = 0; i < numThreads; i++) {
+            const yStart = i * stripHeight;
+            const h = (i === numThreads - 1) ? (canvas.height - yStart) : stripHeight;
+            
+            const imageData = ctx.getImageData(0, yStart, canvas.width, h);
+            
+            // Envia a fatia para um worker específico
+            workers[i].onmessage = (e) => {
+                ctx.putImageData(e.data.imageData, 0, yStart);
+                finishedStrips++;
+                if (finishedStrips === numThreads) isProcessing = false;
+            };
+
+            workers[i].postMessage({ 
+                imageData, 
+                settings, 
+                stripIndex: i 
+            }, [imageData.data.buffer]);
+        }
+    }
+
+    // LÓGICA DE EXPORTAÇÃO
+    document.getElementById('btnExport').onclick = () => {
+        const stream = canvas.captureStream(30);
+        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+        const chunks = [];
+        recorder.ondataavailable = e => chunks.push(e.data);
+        recorder.onstop = () => {
+            const blob = new Blob(chunks, { type: 'video/webm' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'meu_look.webm';
+            link.click();
+        };
+        recorder.start();
+        alert("Gravando... O vídeo será baixado quando terminar.");
+        vHidden.onended = () => recorder.stop();
+    };
 </script>
+
+</body>
+</html>
