@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Signal Simulator Pro</title>
+    <title>Signal Processor V1 - iOS Fixed</title>
     <script src="coi-serviceworker.js"></script>
     <style>
         :root { --vhs-green: #00ff41; --vhs-bg: #050505; }
@@ -14,17 +14,18 @@
         }
         .container { width: 100%; max-width: 400px; border: 1px solid var(--vhs-green); padding: 20px; box-shadow: 0 0 15px rgba(0,255,65,0.2); }
         h1 { font-size: 1.2rem; text-align: center; border-bottom: 1px solid var(--vhs-green); padding-bottom: 10px; }
-        .control { margin-bottom: 20px; }
+        .control { margin-bottom: 20px; text-align: left; }
         label { display: block; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 5px; }
-        input[type="range"] { width: 100%; accent-color: var(--vhs-green); background: #222; }
-        input[type="file"] { width: 100%; font-size: 0.7rem; margin-bottom: 20px; }
+        input[type="range"] { width: 100%; accent-color: var(--vhs-green); }
+        input[type="file"] { width: 100%; font-size: 0.7rem; margin-bottom: 20px; color: white; }
         button { 
             width: 100%; padding: 15px; background: var(--vhs-green); color: #000; 
             border: none; font-weight: bold; cursor: pointer; text-transform: uppercase;
         }
         button:disabled { background: #004411; color: #002200; }
-        #status { font-size: 0.7rem; margin-top: 15px; text-align: center; }
-        video { width: 100%; margin-top: 20px; border: 1px solid #333; display: none; }
+        #status { font-size: 0.7rem; margin-top: 15px; text-align: center; min-height: 1.2em; }
+        progress { width: 100%; height: 5px; accent-color: var(--vhs-green); margin-top: 10px; }
+        video { width: 100%; margin-top: 20px; border: 1px solid #333; display: none; background: #000; }
     </style>
 </head>
 <body>
@@ -32,26 +33,31 @@
 <div class="container">
     <h1>SIGNAL_PROCESSOR_V1</h1>
     
-    <input type="file" id="uploader" accept="video/*">
-
     <div class="control">
-        <label>Chroma Bleed (Vazamento U/V): <span id="bleed-val">6</span></label>
-        <input type="range" id="bleed" min="0" max="15" value="6">
+        <label>1. Inserir Fita</label>
+        <input type="file" id="uploader" accept="video/*">
     </div>
 
     <div class="control">
-        <label>Bandwidth (Lown-Pass Filter): <span id="bandwidth-val">4</span></label>
-        <input type="range" id="bandwidth" min="0" max="10" value="4">
+        <label>Chroma Bleed (Vazamento): <span id="bleed-val">6</span></label>
+        <input type="range" id="bleed" min="0" max="15" value="6" oninput="document.getElementById('bleed-val').innerText=this.value">
     </div>
 
     <div class="control">
-        <label>Tape Noise (Magnetic interference): <span id="noise-val">12</span></label>
-        <input type="range" id="noise" min="0" max="40" value="12">
+        <label>Bandwidth (Nitidez): <span id="bandwidth-val">4</span></label>
+        <input type="range" id="bandwidth" min="0" max="10" value="4" oninput="document.getElementById('bandwidth-val').innerText=this.value">
+    </div>
+
+    <div class="control">
+        <label>Magnetic Noise: <span id="noise-val">12</span></label>
+        <input type="range" id="noise" min="0" max="40" value="12" oninput="document.getElementById('noise-val').innerText=this.value">
     </div>
 
     <button id="btn">RECONSTRUCT SIGNAL</button>
     <div id="status">IDLE...</div>
-    <video id="outputVideo" controls playsinline></video>
+    <progress id="progress" value="0" max="100" style="display:none;"></progress>
+    
+    <video id="outputVideo" controls playsinline webkit-playsinline></video>
 </div>
 
 <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
@@ -63,31 +69,24 @@
         log: false 
     });
 
-    // Função que reconstrói a imagem baseada em sinal analógico
     function buildAnalogFilter(bleed, bandwidth, noise) {
-        // 1. Redução para resolução NTSC (Simulando a largura de banda da fita)
-        let f = `scale=640:480,`;
-
-        // 2. Separação YUV e Chroma Bleed (Passo 1 do Signal)
-        // Desfocamos apenas os canais U e V (cor) mantendo o Y (brilho) nítido
+        // Motor de Sinal Analógico Otimizado para iOS
+        let f = `scale=480:-1,`; // Resolução SD para processamento rápido no iPhone
+        
+        // Simulação de YUV Split
         f += `format=yuv444p,boxblur=luma_radius=0:luma_power=1:chroma_radius=${bleed}:chroma_power=1,`;
-
-        // 3. Bandwidth Control (Passo 4 do Signal)
-        // Usamos um desfoque apenas horizontal (sizeh) para simular o limite de dados por linha
-        if (bandwidth > 0) {
-            f += `avgblur=sizeh=${bandwidth}:sizev=0,`;
-        }
-
-        // 4. Modulação e Ruído Magnético (Passo 3 do Signal)
-        // noise=allf=t: Simula ruído que muda a cada frame (temporal)
+        
+        // Limite de Banda Horizontal
+        if (bandwidth > 0) f += `avgblur=sizeh=${bandwidth}:sizev=0,`;
+        
+        // Ruído Magnético Temporal
         f += `noise=alls=${noise}:allf=t+u,`;
-
-        // 5. Simulação de Head Switching (A barra distorcida no rodapé)
-        // Cortamos 8 pixels do fundo e substituímos por ruído puro
-        f += `drawbox=y=ih-8:h=8:color=black@0.5:t=fill,`;
-
-        // Finalização
-        f += `hue=s=0.9,format=yuv420p`;
+        
+        // Head Switching (Barra inferior)
+        f += `drawbox=y=ih-6:h=6:color=black@0.4:t=fill,`;
+        
+        // CONVERSÃO OBRIGATÓRIA PARA IPHONE (yuv420p)
+        f += `format=yuv420p`;
         return f;
     }
 
@@ -98,38 +97,53 @@
         
         btn.disabled = true;
         const status = document.getElementById('status');
-        if (!ffmpeg.isLoaded()) await ffmpeg.load();
+        const prog = document.getElementById('progress');
+        const video = document.getElementById('outputVideo');
+        video.style.display = "none";
 
-        status.innerText = "ENCODING SIGNAL...";
+        if (!ffmpeg.isLoaded()) {
+            status.innerText = "LOADING ENGINE...";
+            await ffmpeg.load();
+        }
+
+        status.innerText = "READING SIGNAL...";
         ffmpeg.FS('writeFile', 'in.mp4', await fetchFile(file));
 
         const bleed = document.getElementById('bleed').value;
         const bw = document.getElementById('bandwidth').value;
         const ns = document.getElementById('noise').value;
 
+        ffmpeg.setProgress(({ ratio }) => {
+            prog.style.display = 'block';
+            prog.value = ratio * 100;
+            status.innerText = `RECONSTRUCTING: ${(ratio * 100).toFixed(0)}%`;
+        });
+
+        // FLAGS DE COMPATIBILIDADE IPHONE
         await ffmpeg.run(
             '-i', 'in.mp4',
             '-vf', buildAnalogFilter(bleed, bw, ns),
             '-c:v', 'libx264',
+            '-profile:v', 'baseline', // Compatível com qualquer iPhone
+            '-level', '3.0',
+            '-pix_fmt', 'yuv420p',    // OBRIGATÓRIO PARA PLAY NO SAFARI
             '-preset', 'ultrafast',
             '-threads', '1',
+            '-movflags', '+faststart', // Otimiza o play via web
             'out.mp4'
         );
 
-        const data = ffmpeg.FS('readFile', 'out.mp4');
-        const video = document.getElementById('outputVideo');
-        video.src = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
-        video.style.display = "block";
         status.innerText = "SIGNAL RECONSTRUCTED.";
+        const data = ffmpeg.FS('readFile', 'out.mp4');
+        const blob = new Blob([data.buffer], { type: 'video/mp4' });
+        video.src = URL.createObjectURL(blob);
+        video.style.display = "block";
         btn.disabled = false;
+        prog.style.display = 'none';
+        
+        ffmpeg.FS('unlink', 'in.mp4');
+        ffmpeg.FS('unlink', 'out.mp4');
     };
-
-    // Atualizadores de label
-    ['bleed','bandwidth','noise'].forEach(id => {
-        document.getElementById(id).oninput = (e) => {
-            document.getElementById(id+'-val').innerText = e.target.value;
-        }
-    });
 </script>
 </body>
 </html>
