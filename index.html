@@ -3,11 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TimeSlice Pro (Multi-Thread)</title>
-    
-    <!-- OBRIGATÓRIO: O arquivo coi-serviceworker.js precisa estar na mesma pasta -->
+    <title>TimeSlice Engine - Feather Edition</title>
     <script src="coi-serviceworker.js"></script>
-    
     <style>
         :root { --blue: #0a84ff; --bg: #000; --card: #1c1c1e; }
         body { 
@@ -21,12 +18,7 @@
             width: 100%; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.8);
             text-align: center;
         }
-        h1 { font-size: 1.6rem; margin: 0 0 5px 0; color: var(--blue); }
-        .mode-badge { 
-            background: #32d74b; color: black; font-size: 0.7rem; 
-            padding: 2px 8px; border-radius: 10px; font-weight: bold;
-            display: inline-block; margin-bottom: 20px;
-        }
+        h1 { font-size: 1.6rem; margin: 0 0 15px 0; color: var(--blue); }
         .input-group { margin-bottom: 20px; text-align: left; }
         label { display: block; font-size: 0.85rem; color: #8e8e93; margin-bottom: 8px; }
         input[type="file"], input[type="number"], input[type="range"] {
@@ -40,17 +32,16 @@
             font-weight: 600; font-size: 1rem; cursor: pointer;
             transition: 0.2s; margin-top: 10px;
         }
-        button:disabled { background: #3a3a3c; color: #8e8e93; opacity: 0.6; }
+        button:disabled { background: #3a3a3c; color: #8e8e93; }
         #status { margin-top: 15px; font-size: 0.9rem; color: #32d74b; min-height: 1.2em; }
-        progress { width: 100%; height: 8px; margin-top: 15px; accent-color: var(--blue); }
+        progress { width: 100%; height: 6px; margin-top: 15px; accent-color: var(--blue); }
         video { width: 100%; margin-top: 20px; border-radius: 12px; display: none; background: #000; }
     </style>
 </head>
 <body>
 
     <div class="card">
-        <h1>TimeSlice Pro</h1>
-        <div class="mode-badge">MULTI-THREAD ATIVADO</div>
+        <h1>TimeSlice Feather</h1>
         
         <div class="input-group">
             <label>Vídeo de Entrada</label>
@@ -59,7 +50,7 @@
 
         <div style="display: flex; gap: 15px;">
             <div class="input-group" style="flex: 1;">
-                <label>Fatias</label>
+                <label>Fatias (Slices)</label>
                 <input type="number" id="slices" value="15" min="2" max="40">
             </div>
             <div class="input-group" style="flex: 1;">
@@ -69,15 +60,14 @@
         </div>
 
         <div class="input-group">
-            <label>Suavização (Blur): <span id="blur-val">6</span></label>
-            <input type="range" id="smoothness" min="1" max="15" value="6" oninput="document.getElementById('blur-val').innerText=this.value">
+            <label>Suavização (Feather): <span id="feather-val">2</span></label>
+            <input type="range" id="feather" min="0" max="20" value="2" oninput="document.getElementById('feather-val').innerText = this.value">
         </div>
 
-        <button id="btn">GERAR VÍDEO (RÁPIDO)</button>
+        <button id="btn">GERAR TIME SLICE</button>
         
-        <div id="status">Aguardando arquivo...</div>
+        <div id="status">Pronto</div>
         <progress id="progress" value="0" max="100" style="display:none;"></progress>
-        
         <video id="outputVideo" controls playsinline></video>
     </div>
 
@@ -85,21 +75,14 @@
     
     <script>
         const { createFFmpeg, fetchFile } = FFmpeg;
-        
-        // Configuração Multi-Thread
         const ffmpeg = createFFmpeg({ 
-            // Mudamos para a versão core-mt (Multi-Thread)
-            corePath: 'https://unpkg.com/@ffmpeg/core-mt@0.11.0/dist/ffmpeg-core.js',
-            log: true 
+            corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js',
+            log: false 
         });
 
-        const btn = document.getElementById('btn');
-        const status = document.getElementById('status');
-        const progress = document.getElementById('progress');
-        const outputVideo = document.getElementById('outputVideo');
-
-        function buildSmoothFilter(numSlices, delayStep, blurAmount) {
-            let filter = `split=${numSlices}`;
+        function buildFilter(numSlices, delayStep, featherAmount) {
+            // Primeiro reduzimos para 720p para garantir que o iPhone aguente o processamento
+            let filter = `[0:v]scale=720:-1,split=${numSlices}`;
             let labels = "";
             for(let i=0; i<numSlices; i++) labels += `[v${i}]`;
             filter += `${labels};`;
@@ -107,68 +90,72 @@
             let stackLabels = "";
             for(let i=0; i<numSlices; i++) {
                 let startTrim = (i * delayStep).toFixed(2);
-                filter += `[v${i}]tmix=frames=${blurAmount}:weights='1',` +
-                          `crop=iw:ih/${numSlices}:0:ih/${numSlices}*${i},` +
-                          `trim=start=${startTrim},setpts=PTS-STARTPTS,` +
-                          `boxblur=1:0[s${i}];`;
+                filter += `[v${i}]crop=iw:ih/${numSlices}:0:ih/${numSlices}*${i},trim=start=${startTrim},setpts=PTS-STARTPTS[s${i}];`;
                 stackLabels += `[s${i}]`;
             }
-            filter += `${stackLabels}vstack=inputs=${numSlices}:shortest=1,format=yuv420p`;
+            
+            // Empilha as fatias
+            filter += `${stackLabels}vstack=inputs=${numSlices}:shortest=1`;
+
+            // APLICAÇÃO DO FEATHER (Suavização de borda)
+            // Usamos boxblur apenas no eixo vertical (Y) para misturar as emendas
+            if (featherAmount > 0) {
+                filter += `,boxblur=0:${featherAmount}`;
+            }
+
+            filter += `,format=yuv420p`;
             return filter;
         }
 
+        const btn = document.getElementById('btn');
         btn.onclick = async () => {
             const file = document.getElementById('uploader').files[0];
             if (!file) return alert("Selecione um vídeo!");
 
             try {
                 btn.disabled = true;
-                outputVideo.style.display = "none";
+                const status = document.getElementById('status');
+                const prog = document.getElementById('progress');
+                const video = document.getElementById('outputVideo');
+                video.style.display = "none";
                 
                 if (!ffmpeg.isLoaded()) {
-                    status.innerText = "Iniciando motor multi-core...";
+                    status.innerText = "Iniciando...";
                     await ffmpeg.load();
                 }
 
-                status.innerText = "Lendo vídeo...";
-                ffmpeg.FS('writeFile', 'input.mp4', await fetchFile(file));
+                status.innerText = "Lendo arquivo...";
+                ffmpeg.FS('writeFile', 'in.mp4', await fetchFile(file));
 
                 ffmpeg.setProgress(({ ratio }) => {
-                    progress.style.display = 'block';
-                    progress.value = ratio * 100;
-                    status.innerText = `Renderizando: ${(ratio * 100).toFixed(0)}%`;
+                    prog.style.display = 'block';
+                    prog.value = ratio * 100;
+                    status.innerText = `Processando: ${(ratio * 100).toFixed(0)}%`;
                 });
 
                 const slices = parseInt(document.getElementById('slices').value);
                 const delay = parseFloat(document.getElementById('delay').value);
-                const blur = parseInt(document.getElementById('smoothness').value);
+                const feather = parseInt(document.getElementById('feather').value);
 
-                // REMOVIDO '-threads 1' -> Agora ele usa o máximo possível
                 await ffmpeg.run(
-                    '-i', 'input.mp4', 
-                    '-vf', buildSmoothFilter(slices, delay, blur), 
+                    '-i', 'in.mp4', 
+                    '-vf', buildFilter(slices, delay, feather), 
                     '-c:v', 'libx264', 
-                    '-preset', 'ultrafast', 
-                    '-pix_fmt', 'yuv420p', 
-                    'output.mp4'
+                    '-preset', 'ultrafast',
+                    '-threads', '1', 
+                    'out.mp4'
                 );
 
-                const data = ffmpeg.FS('readFile', 'output.mp4');
-                const url = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
-                
+                const data = ffmpeg.FS('readFile', 'out.mp4');
+                video.src = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
+                video.style.display = "block";
                 status.innerText = "Concluído!";
-                outputVideo.src = url;
-                outputVideo.style.display = "block";
-                
-                ffmpeg.FS('unlink', 'input.mp4');
-                ffmpeg.FS('unlink', 'output.mp4');
 
             } catch (e) {
-                status.innerText = "Ocorreu um erro.";
+                document.getElementById('status').innerText = "Erro no processamento.";
                 console.error(e);
             } finally {
                 btn.disabled = false;
-                progress.style.display = 'none';
             }
         };
     </script>
