@@ -2,155 +2,175 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>RSMB v2.0</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TimeSlice Pro (Multi-Thread)</title>
     
-    <!-- O coi-serviceworker.js DEVE estar na mesma pasta no GitHub -->
+    <!-- OBRIGATÓRIO: O arquivo coi-serviceworker.js precisa estar na mesma pasta -->
     <script src="coi-serviceworker.js"></script>
-
+    
     <style>
-        :root { --bg: #000; --accent: #fff; --grey: #1a1a1a; }
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        
+        :root { --blue: #0a84ff; --bg: #000; --card: #1c1c1e; }
         body { 
-            margin: 0; background: var(--bg); color: #fff; 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            display: flex; flex-direction: column; min-height: 100vh;
+            font-family: -apple-system, system-ui, sans-serif;
+            background: var(--bg); color: white; 
+            display: flex; flex-direction: column; align-items: center; 
+            padding: 20px; margin: 0; min-height: 100vh;
         }
-
-        header { 
-            padding: 40px 20px 20px; text-align: center; 
-            border-bottom: 1px solid var(--grey);
+        .card {
+            background: var(--card); padding: 25px; border-radius: 20px;
+            width: 100%; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            text-align: center;
         }
-        .logo { font-size: 10px; font-weight: 900; letter-spacing: 4px; color: #444; text-transform: uppercase; }
-
-        main { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 20px; gap: 20px; }
-
-        .video-container { 
-            width: 100%; max-width: 500px; background: #050505; 
-            aspect-ratio: 16/9; border-radius: 8px; display: flex; 
-            align-items: center; justify-content: center; overflow: hidden;
-            border: 1px solid var(--grey);
+        h1 { font-size: 1.6rem; margin: 0 0 5px 0; color: var(--blue); }
+        .mode-badge { 
+            background: #32d74b; color: black; font-size: 0.7rem; 
+            padding: 2px 8px; border-radius: 10px; font-weight: bold;
+            display: inline-block; margin-bottom: 20px;
         }
-        video { width: 100%; height: 100%; object-fit: contain; display: none; }
-
-        .controls { width: 100%; max-width: 400px; padding: 20px 0; }
-        .slider-group { margin-bottom: 30px; }
-        label { font-size: 9px; text-transform: uppercase; letter-spacing: 2px; color: #666; display: block; margin-bottom: 15px; }
-        
-        input[type=range] { -webkit-appearance: none; width: 100%; background: var(--grey); height: 2px; outline: none; }
-        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 15px; width: 15px; background: #fff; border-radius: 50%; }
-
-        .btn-group { display: flex; gap: 10px; width: 100%; max-width: 400px; }
-        .btn { 
-            flex: 1; padding: 15px; font-size: 10px; font-weight: 900; 
-            text-transform: uppercase; letter-spacing: 2px; border: none; cursor: pointer;
+        .input-group { margin-bottom: 20px; text-align: left; }
+        label { display: block; font-size: 0.85rem; color: #8e8e93; margin-bottom: 8px; }
+        input[type="file"], input[type="number"], input[type="range"] {
+            width: 100%; padding: 12px; background: #2c2c2e;
+            border: 1px solid #3a3a3c; border-radius: 12px; color: white;
+            box-sizing: border-box; font-size: 1rem;
         }
-        .btn-open { background: var(--grey); color: #fff; }
-        .btn-render { background: #fff; color: #000; }
-        .btn:disabled { opacity: 0.2; }
-
-        #status { font-size: 9px; color: #ff3b30; text-transform: uppercase; letter-spacing: 1px; margin-top: 10px; text-align: center; }
+        button {
+            width: 100%; padding: 16px; background: var(--blue);
+            border: none; border-radius: 12px; color: white;
+            font-weight: 600; font-size: 1rem; cursor: pointer;
+            transition: 0.2s; margin-top: 10px;
+        }
+        button:disabled { background: #3a3a3c; color: #8e8e93; opacity: 0.6; }
+        #status { margin-top: 15px; font-size: 0.9rem; color: #32d74b; min-height: 1.2em; }
+        progress { width: 100%; height: 8px; margin-top: 15px; accent-color: var(--blue); }
+        video { width: 100%; margin-top: 20px; border-radius: 12px; display: none; background: #000; }
     </style>
 </head>
 <body>
 
-<header>
-    <div class="logo">RSMB / Engine V2.0</div>
-</header>
-
-<main>
-    <div class="video-container">
-        <video id="outputVideo" controls playsinline></video>
-        <div id="placeholder" style="color:#222; font-size:10px; text-transform:uppercase;">No Media</div>
-    </div>
-
-    <div id="status">System Ready</div>
-
-    <div class="controls">
-        <div class="slider-group">
-            <label>Motion Intensity: <span id="val">0.5</span></label>
-            <input type="range" id="blur" min="0.1" max="0.9" step="0.1" value="0.5">
+    <div class="card">
+        <h1>TimeSlice Pro</h1>
+        <div class="mode-badge">MULTI-THREAD ATIVADO</div>
+        
+        <div class="input-group">
+            <label>Vídeo de Entrada</label>
+            <input type="file" id="uploader" accept="video/*" />
         </div>
+
+        <div style="display: flex; gap: 15px;">
+            <div class="input-group" style="flex: 1;">
+                <label>Fatias</label>
+                <input type="number" id="slices" value="15" min="2" max="40">
+            </div>
+            <div class="input-group" style="flex: 1;">
+                <label>Atraso (s)</label>
+                <input type="number" id="delay" value="0.1" step="0.05">
+            </div>
+        </div>
+
+        <div class="input-group">
+            <label>Suavização (Blur): <span id="blur-val">6</span></label>
+            <input type="range" id="smoothness" min="1" max="15" value="6" oninput="document.getElementById('blur-val').innerText=this.value">
+        </div>
+
+        <button id="btn">GERAR VÍDEO (RÁPIDO)</button>
+        
+        <div id="status">Aguardando arquivo...</div>
+        <progress id="progress" value="0" max="100" style="display:none;"></progress>
+        
+        <video id="outputVideo" controls playsinline></video>
     </div>
 
-    <div class="btn-group">
-        <button class="btn btn-open" onclick="document.getElementById('fileIn').click()">Open</button>
-        <button class="btn btn-render" id="renderBtn">Render</button>
-    </div>
-</main>
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+    
+    <script>
+        const { createFFmpeg, fetchFile } = FFmpeg;
+        
+        // Configuração Multi-Thread
+        const ffmpeg = createFFmpeg({ 
+            // Mudamos para a versão core-mt (Multi-Thread)
+            corePath: 'https://unpkg.com/@ffmpeg/core-mt@0.11.0/dist/ffmpeg-core.js',
+            log: true 
+        });
 
-<input type="file" id="fileIn" accept="video/*" style="display:none">
+        const btn = document.getElementById('btn');
+        const status = document.getElementById('status');
+        const progress = document.getElementById('progress');
+        const outputVideo = document.getElementById('outputVideo');
 
-<!-- Script do FFmpeg -->
-<script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+        function buildSmoothFilter(numSlices, delayStep, blurAmount) {
+            let filter = `split=${numSlices}`;
+            let labels = "";
+            for(let i=0; i<numSlices; i++) labels += `[v${i}]`;
+            filter += `${labels};`;
 
-<script>
-    const { createFFmpeg, fetchFile } = FFmpeg;
-    const ffmpeg = createFFmpeg({ 
-        log: true, 
-        corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
-    });
-
-    const blurInput = document.getElementById('blur');
-    const valDisplay = document.getElementById('val');
-    const status = document.getElementById('status');
-    const video = document.getElementById('outputVideo');
-    const renderBtn = document.getElementById('renderBtn');
-
-    blurInput.oninput = () => valDisplay.innerText = blurInput.value;
-
-    document.getElementById('fileIn').onchange = (e) => {
-        if(e.target.files[0]) status.innerText = "Video Loaded. Ready to Render.";
-    };
-
-    renderBtn.onclick = async () => {
-        const file = document.getElementById('fileIn').files[0];
-        if (!file) return;
-
-        try {
-            renderBtn.disabled = true;
-            status.innerText = "Initializing Engine...";
-
-            if (!ffmpeg.isLoaded()) await ffmpeg.load();
-
-            status.innerText = "Processing Video...";
-            ffmpeg.FS('writeFile', 'in.mp4', await fetchFile(file));
-
-            const intensity = blurInput.value;
-            
-            // FILTRO ESTÁVEL PARA IOS (tblend + framestep)
-            // Em vez de criar frames novos, ele mistura os frames existentes com transparência.
-            // É 10x mais leve e não mata a memória do Safari.
-            const filter = `tblend=all_mode=average,scale=trunc(iw/2)*2:trunc(ih/2)*2`;
-
-            await ffmpeg.run(
-                '-i', 'in.mp4',
-                '-vf', filter,
-                '-c:v', 'libx264',
-                '-preset', 'ultrafast',
-                '-pix_fmt', 'yuv420p',
-                'out.mp4'
-            );
-
-            const data = ffmpeg.FS('readFile', 'out.mp4');
-            video.src = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
-            
-            document.getElementById('placeholder').style.display = "none";
-            video.style.display = "block";
-            status.innerText = "Render Complete!";
-            
-            // Limpa para não dar crash de memória no próximo render
-            ffmpeg.FS('unlink', 'in.mp4');
-            ffmpeg.FS('unlink', 'out.mp4');
-        } catch (err) {
-            console.error(err);
-            status.innerText = "Error: Too much memory used.";
-        } finally {
-            renderBtn.disabled = false;
+            let stackLabels = "";
+            for(let i=0; i<numSlices; i++) {
+                let startTrim = (i * delayStep).toFixed(2);
+                filter += `[v${i}]tmix=frames=${blurAmount}:weights='1',` +
+                          `crop=iw:ih/${numSlices}:0:ih/${numSlices}*${i},` +
+                          `trim=start=${startTrim},setpts=PTS-STARTPTS,` +
+                          `boxblur=1:0[s${i}];`;
+                stackLabels += `[s${i}]`;
+            }
+            filter += `${stackLabels}vstack=inputs=${numSlices}:shortest=1,format=yuv420p`;
+            return filter;
         }
-    };
-</script>
 
+        btn.onclick = async () => {
+            const file = document.getElementById('uploader').files[0];
+            if (!file) return alert("Selecione um vídeo!");
+
+            try {
+                btn.disabled = true;
+                outputVideo.style.display = "none";
+                
+                if (!ffmpeg.isLoaded()) {
+                    status.innerText = "Iniciando motor multi-core...";
+                    await ffmpeg.load();
+                }
+
+                status.innerText = "Lendo vídeo...";
+                ffmpeg.FS('writeFile', 'input.mp4', await fetchFile(file));
+
+                ffmpeg.setProgress(({ ratio }) => {
+                    progress.style.display = 'block';
+                    progress.value = ratio * 100;
+                    status.innerText = `Renderizando: ${(ratio * 100).toFixed(0)}%`;
+                });
+
+                const slices = parseInt(document.getElementById('slices').value);
+                const delay = parseFloat(document.getElementById('delay').value);
+                const blur = parseInt(document.getElementById('smoothness').value);
+
+                // REMOVIDO '-threads 1' -> Agora ele usa o máximo possível
+                await ffmpeg.run(
+                    '-i', 'input.mp4', 
+                    '-vf', buildSmoothFilter(slices, delay, blur), 
+                    '-c:v', 'libx264', 
+                    '-preset', 'ultrafast', 
+                    '-pix_fmt', 'yuv420p', 
+                    'output.mp4'
+                );
+
+                const data = ffmpeg.FS('readFile', 'output.mp4');
+                const url = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
+                
+                status.innerText = "Concluído!";
+                outputVideo.src = url;
+                outputVideo.style.display = "block";
+                
+                ffmpeg.FS('unlink', 'input.mp4');
+                ffmpeg.FS('unlink', 'output.mp4');
+
+            } catch (e) {
+                status.innerText = "Ocorreu um erro.";
+                console.error(e);
+            } finally {
+                btn.disabled = false;
+                progress.style.display = 'none';
+            }
+        };
+    </script>
 </body>
 </html>
