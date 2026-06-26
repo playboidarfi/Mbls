@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TimeSlice Pro - MultiThread</title>
+    <title>TimeSlice Engine Pro</title>
     
     <!-- OBRIGATÓRIO: coi-serviceworker.js deve estar na mesma pasta -->
     <script src="coi-serviceworker.js"></script>
@@ -29,10 +29,11 @@
         }
         .input-group { margin-bottom: 20px; text-align: left; }
         label { display: block; font-size: 0.85rem; color: #8e8e93; margin-bottom: 8px; }
-        input[type="file"], input[type="number"], input[type="range"] {
+        input[type="file"], input[type="number"], select {
             width: 100%; padding: 12px; background: #2c2c2e;
             border: 1px solid #3a3a3c; border-radius: 12px; color: white;
             box-sizing: border-box; font-size: 1rem;
+            -webkit-appearance: none;
         }
         .checkbox-group { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
         input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--blue); }
@@ -44,7 +45,7 @@
         }
         button:disabled { background: #3a3a3c; color: #8e8e93; opacity: 0.6; }
         #status { margin-top: 15px; font-size: 0.9rem; color: #32d74b; }
-        progress { width: 100%; height: 6px; margin-top: 15px; accent-color: var(--blue); width: 100%; }
+        progress { width: 100%; height: 6px; margin-top: 15px; accent-color: var(--blue); }
         video { width: 100%; margin-top: 20px; border-radius: 12px; display: none; background: #000; }
     </style>
 </head>
@@ -62,7 +63,7 @@
         <div style="display: flex; gap: 15px;">
             <div class="input-group" style="flex: 1;">
                 <label>Fatias</label>
-                <input type="number" id="slices" value="12" min="2" max="30">
+                <input type="number" id="slices" value="12" min="2" max="40">
             </div>
             <div class="input-group" style="flex: 1;">
                 <label>Atraso (s)</label>
@@ -71,8 +72,11 @@
         </div>
 
         <div class="input-group">
-            <label>Ângulo do Corte: <span id="angle-val">0</span>°</label>
-            <input type="range" id="angle" min="-45" max="45" value="0" oninput="document.getElementById('angle-val').innerText = this.value">
+            <label>Orientação das Fatias</label>
+            <select id="orientation">
+                <option value="horizontal">Horizontal (Cortes Deitados)</option>
+                <option value="vertical">Vertical (Cortes em Pé)</option>
+            </select>
         </div>
 
         <div class="checkbox-group">
@@ -80,9 +84,9 @@
             <label style="margin-bottom:0">Inverter Fluxo Temporal</label>
         </div>
 
-        <button id="btn">GERAR VÍDEO RÁPIDO</button>
+        <button id="btn">GERAR VÍDEO</button>
         
-        <div id="status">Aguardando...</div>
+        <div id="status">Aguardando arquivo...</div>
         <progress id="progress" value="0" max="100" style="display:none;"></progress>
         <video id="outputVideo" controls playsinline></video>
     </div>
@@ -92,17 +96,12 @@
     <script>
         const { createFFmpeg, fetchFile } = FFmpeg;
         
-        // Ativando motor Multi-Thread
         const ffmpeg = createFFmpeg({ 
             corePath: 'https://unpkg.com/@ffmpeg/core-mt@0.11.0/dist/ffmpeg-core.js',
             log: true 
         });
 
-        function buildFilter(numSlices, delayStep, angle, invert) {
-            const rad = (angle * Math.PI) / 180;
-            const invRad = -rad;
-
-            // Pré-processamento: Escala 720p para evitar estouro de memória
+        function buildFilter(numSlices, delayStep, orientation, invert) {
             let filter = `[0:v]scale=720:-1,split=${numSlices}`;
             let labels = "";
             for(let i=0; i<numSlices; i++) labels += `[v${i}]`;
@@ -113,16 +112,20 @@
                 let sliceIdx = invert ? (numSlices - 1 - i) : i;
                 let startTrim = (sliceIdx * delayStep).toFixed(2);
                 
-                // Gira o vídeo -> Corta a fatia -> Gira de volta (o vídeo fica reto, a linha diagonal)
-                filter += `[v${i}]rotate=${rad}:c=black:ow='hypot(iw,ih)':oh=ow,` +
-                          `crop=iw:ih/${numSlices}:0:ih/${numSlices}*${i},` +
-                          `rotate=${invRad}:c=none:ow=720:oh=ih*${numSlices},` +
-                          `trim=start=${startTrim},setpts=PTS-STARTPTS[s${i}];`;
+                if (orientation === "horizontal") {
+                    // Corte Horizontal (empilha com vstack)
+                    filter += `[v${i}]crop=iw:ih/${numSlices}:0:ih/${numSlices}*${i},`;
+                } else {
+                    // Corte Vertical (empilha com hstack)
+                    filter += `[v${i}]crop=iw/${numSlices}:ih:iw/${numSlices}*${i}:0,`;
+                }
                 
+                filter += `trim=start=${startTrim},setpts=PTS-STARTPTS[s${i}];`;
                 stackLabels += `[s${i}]`;
             }
             
-            filter += `${stackLabels}vstack=inputs=${numSlices}:shortest=1,format=yuv420p`;
+            const stackMode = orientation === "horizontal" ? "vstack" : "hstack";
+            filter += `${stackLabels}${stackMode}=inputs=${numSlices}:shortest=1,format=yuv420p`;
             return filter;
         }
 
@@ -154,13 +157,12 @@
 
                 const slices = parseInt(document.getElementById('slices').value);
                 const delay = parseFloat(document.getElementById('delay').value);
-                const angle = parseInt(document.getElementById('angle').value);
+                const orientation = document.getElementById('orientation').value;
                 const invert = document.getElementById('invert').checked;
 
-                // MULTI-THREAD ATIVADO (Removido -threads 1)
                 await ffmpeg.run(
                     '-i', 'in.mp4', 
-                    '-vf', buildFilter(slices, delay, angle, invert), 
+                    '-vf', buildFilter(slices, delay, orientation, invert), 
                     '-c:v', 'libx264', 
                     '-preset', 'ultrafast',
                     '-profile:v', 'baseline',
@@ -179,7 +181,7 @@
                 ffmpeg.FS('unlink', 'out.mp4');
 
             } catch (e) {
-                status.innerText = "Erro: O vídeo pode ser muito grande para o iPhone.";
+                status.innerText = "Erro no processamento.";
                 console.error(e);
             } finally {
                 btn.disabled = false;
