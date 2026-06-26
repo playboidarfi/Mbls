@@ -2,149 +2,215 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Signal Processor V1 - Final Fix</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Signal Slice Engine</title>
+    
+    <!-- Configuração de App (PWA) -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <script src="coi-serviceworker.js"></script>
+    
     <style>
-        :root { --vhs-green: #00ff41; --vhs-bg: #050505; }
+        :root { --accent: #00ff41; --bg: #000; --card: #111; }
         body { 
-            background: var(--vhs-bg); color: var(--vhs-green); 
-            font-family: 'Courier New', monospace; padding: 20px;
-            display: flex; flex-direction: column; align-items: center;
+            font-family: -apple-system, system-ui, monospace;
+            background: var(--bg); color: #fff; 
+            margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center;
         }
-        .container { width: 100%; max-width: 400px; border: 1px solid var(--vhs-green); padding: 20px; box-shadow: 0 0 15px rgba(0,255,65,0.2); }
-        h1 { font-size: 1.2rem; text-align: center; border-bottom: 1px solid var(--vhs-green); padding-bottom: 10px; }
-        .control { margin-bottom: 20px; text-align: left; }
-        label { display: block; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 5px; }
-        input[type="range"] { width: 100%; accent-color: var(--vhs-green); }
-        input[type="file"] { width: 100%; font-size: 0.7rem; margin-bottom: 20px; color: white; }
-        button { 
-            width: 100%; padding: 15px; background: var(--vhs-green); color: #000; 
-            border: none; font-weight: bold; cursor: pointer; text-transform: uppercase;
+        .container { width: 100%; max-width: 400px; }
+        .card { 
+            background: var(--card); border: 1px solid #333; padding: 20px; 
+            border-radius: 15px; box-shadow: 0 0 20px rgba(0,255,65,0.1);
+        }
+        h1 { font-size: 1.2rem; color: var(--accent); text-align: center; letter-spacing: 2px; margin-bottom: 25px; }
+        
+        .section-title { font-size: 0.7rem; color: var(--accent); margin-bottom: 15px; border-bottom: 1px solid #333; padding-bottom: 5px; text-transform: uppercase; }
+        
+        .group { margin-bottom: 15px; text-align: left; }
+        label { display: block; font-size: 0.75rem; color: #888; margin-bottom: 5px; }
+        
+        input[type="file"], input[type="number"], select, input[type="range"] {
+            width: 100%; padding: 12px; background: #222; border: 1px solid #333; 
+            border-radius: 8px; color: white; box-sizing: border-box; font-size: 0.9rem;
+        }
+        
+        .row { display: flex; gap: 10px; }
+        .row .group { flex: 1; }
+
+        button {
+            width: 100%; padding: 18px; background: var(--accent); color: #000;
+            border: none; border-radius: 10px; font-weight: bold; font-size: 1rem;
+            cursor: pointer; transition: 0.3s; margin-top: 10px;
         }
         button:disabled { background: #004411; color: #002200; }
-        #status { font-size: 0.7rem; margin-top: 15px; text-align: center; color: #aaa; }
-        video { width: 100%; margin-top: 20px; border: 1px solid #333; display: none; background: #000; }
-        #download-link { display: none; color: white; margin-top: 10px; text-decoration: underline; font-size: 0.8rem; }
+
+        #status { margin-top: 15px; font-size: 0.75rem; color: var(--accent); text-align: center; min-height: 1.5em; }
+        progress { width: 100%; height: 4px; accent-color: var(--accent); margin-top: 10px; display: none; }
+        
+        video { width: 100%; margin-top: 20px; border-radius: 10px; display: none; background: #000; }
+        .footer { font-size: 0.6rem; color: #444; text-align: center; margin-top: 30px; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h1>SIGNAL_PROCESSOR_V1</h1>
-    
-    <div class="control">
-        <label>1. Carregar Vídeo</label>
-        <input type="file" id="uploader" accept="video/*">
-    </div>
+    <div class="container">
+        <div class="card">
+            <h1>SIGNAL SLICE ENGINE</h1>
 
-    <div class="control">
-        <label>Chroma Bleed: <span id="bleed-val">6</span></label>
-        <input type="range" id="bleed" min="0" max="15" value="6" oninput="document.getElementById('bleed-val').innerText=this.value">
-    </div>
+            <div class="group">
+                <label>VÍDEO DE ENTRADA</label>
+                <input type="file" id="uploader" accept="video/*">
+            </div>
 
-    <div class="control">
-        <label>Bandwidth (Nitidez): <span id="bandwidth-val">4</span></label>
-        <input type="range" id="bandwidth" min="0" max="10" value="4" oninput="document.getElementById('bandwidth-val').innerText=this.value">
-    </div>
+            <!-- Seção TimeSlice -->
+            <div class="section-title">Motor TimeSlice</div>
+            <div class="row">
+                <div class="group">
+                    <label>Fatias</label>
+                    <input type="number" id="slices" value="10" min="1" max="30">
+                </div>
+                <div class="group">
+                    <label>Atraso (s)</label>
+                    <input type="number" id="delay" value="0.05" step="0.01">
+                </div>
+            </div>
+            <div class="group">
+                <select id="mode">
+                    <option value="none">Desativar TimeSlice</option>
+                    <option value="vstack">Horizontal (Cortes Deitados)</option>
+                    <option value="hstack">Vertical (Cortes em Pé)</option>
+                </select>
+            </div>
 
-    <div class="control">
-        <label>Tape Noise: <span id="noise-val">12</span></label>
-        <input type="range" id="noise" min="0" max="40" value="12" oninput="document.getElementById('noise-val').innerText=this.value">
-    </div>
+            <!-- Seção Signal -->
+            <div class="section-title">Simulação de Sinal (VHS)</div>
+            <div class="group">
+                <label>Chroma Bleed (Vazamento): <span id="bleed-val">0</span></label>
+                <input type="range" id="bleed" min="0" max="12" value="0" oninput="document.getElementById('bleed-val').innerText=this.value">
+            </div>
+            <div class="group">
+                <label>Noise (Interferência): <span id="noise-val">0</span></label>
+                <input type="range" id="noise" min="0" max="30" value="0" oninput="document.getElementById('noise-val').innerText=this.value">
+            </div>
 
-    <button id="btn">RECONSTRUCT SIGNAL</button>
-    <div id="status">AGUARDANDO...</div>
-    
-    <!-- Muted é importante para o Safari permitir o play automático de blobs -->
-    <video id="outputVideo" controls playsinline muted></video>
-    <a id="download-link">Baixar Vídeo Manualmente</a>
-</div>
-
-<script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
-
-<script>
-    const { createFFmpeg, fetchFile } = FFmpeg;
-    const ffmpeg = createFFmpeg({ 
-        corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js',
-        log: true 
-    });
-
-    function buildAnalogFilter(bleed, bandwidth, noise) {
-        // -2 garante que a largura seja 480 e a altura seja calculada como um número PAR (exigência do H.264)
-        let f = `scale=480:-2,`; 
-        f += `format=yuv444p,boxblur=luma_radius=0:luma_power=1:chroma_radius=${bleed}:chroma_power=1,`;
-        if (bandwidth > 0) f += `avgblur=sizeh=${bandwidth}:sizev=0,`;
-        f += `noise=alls=${noise}:allf=t+u,`;
-        f += `drawbox=y=ih-6:h=6:color=black@0.4:t=fill,`;
-        f += `format=yuv420p`;
-        return f;
-    }
-
-    const btn = document.getElementById('btn');
-    btn.onclick = async () => {
-        const file = document.getElementById('uploader').files[0];
-        if (!file) return;
+            <button id="btn">RECONSTRUIR SINAL</button>
+            
+            <div id="status">SISTEMA PRONTO</div>
+            <progress id="progress" value="0" max="100"></progress>
+            
+            <video id="outputVideo" controls playsinline muted></video>
+        </div>
         
-        btn.disabled = true;
-        const status = document.getElementById('status');
-        const video = document.getElementById('outputVideo');
-        const dlLink = document.getElementById('download-link');
-        
-        video.style.display = "none";
-        dlLink.style.display = "none";
+        <div class="footer">ENGINE V2.0 // IOS COMPATIBLE // NO_MULTI_THREAD_STABLE</div>
+    </div>
 
-        if (!ffmpeg.isLoaded()) {
-            status.innerText = "CARREGANDO MOTOR...";
-            await ffmpeg.load();
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+    
+    <script>
+        const { createFFmpeg, fetchFile } = FFmpeg;
+        const ffmpeg = createFFmpeg({ 
+            corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js',
+            log: false 
+        });
+
+        function buildSuperFilter(slices, delay, mode, bleed, noise) {
+            // 1. Redução de escala para número PAR (Essencial para iPhone)
+            let f = `scale=480:-2`;
+
+            // 2. Aplicar Processamento de Sinal (Signal) antes das fatias
+            if (bleed > 0 || noise > 0) {
+                f += `,format=yuv444p,boxblur=luma_radius=0:luma_power=1:chroma_radius=${bleed}:chroma_power=1`;
+                f += `,noise=alls=${noise}:allf=t+u`;
+            }
+
+            // 3. Aplicar TimeSlice se o modo não for 'none'
+            if (mode !== "none") {
+                f += `,split=${slices}`;
+                let labels = "";
+                for(let i=0; i<slices; i++) labels += `[v${i}]`;
+                f += `${labels};`;
+
+                let stackLabels = "";
+                for(let i=0; i<slices; i++) {
+                    let startTrim = (i * delay).toFixed(2);
+                    if (mode === "vstack") {
+                        f += `[v${i}]crop=iw:ih/${slices}:0:ih/${slices}*${i},`;
+                    } else {
+                        f += `[v${i}]crop=iw/${slices}:ih:iw/${slices}*${i}:0,`;
+                    }
+                    f += `trim=start=${startTrim},setpts=PTS-STARTPTS[s${i}];`;
+                    stackLabels += `[s${i}]`;
+                }
+                f += `${stackLabels}${mode}=inputs=${slices}:shortest=1`;
+            }
+
+            // 4. Conversão final para Compatibilidade Apple
+            f += `,format=yuv420p`;
+            return f;
         }
 
-        status.innerText = "LENDO SINAL...";
-        ffmpeg.FS('writeFile', 'input_file.mp4', await fetchFile(file));
+        const btn = document.getElementById('btn');
+        btn.onclick = async () => {
+            const file = document.getElementById('uploader').files[0];
+            if (!file) return;
 
-        const bleed = document.getElementById('bleed').value;
-        const bw = document.getElementById('bandwidth').value;
-        const ns = document.getElementById('noise').value;
+            try {
+                btn.disabled = true;
+                const status = document.getElementById('status');
+                const prog = document.getElementById('progress');
+                const video = document.getElementById('outputVideo');
+                video.style.display = "none";
+                
+                if (!ffmpeg.isLoaded()) {
+                    status.innerText = "INICIALIZANDO MOTOR...";
+                    await ffmpeg.load();
+                }
 
-        status.innerText = "RECONSTRUINDO... (AGUARDE)";
+                status.innerText = "CARREGANDO SINAL...";
+                ffmpeg.FS('writeFile', 'in.mp4', await fetchFile(file));
 
-        try {
-            await ffmpeg.run(
-                '-i', 'input_file.mp4',
-                '-vf', buildAnalogFilter(bleed, bw, ns),
-                '-c:v', 'libx264',
-                '-preset', 'ultrafast',
-                '-tune', 'zerolatency',
-                '-profile:v', 'baseline', 
-                '-level', '3.0',
-                '-pix_fmt', 'yuv420p',
-                '-threads', '1',
-                '-an', // Removendo áudio para evitar erros de codec/sync que travam o Safari
-                '-movflags', '+faststart',
-                'output_file.mp4'
-            );
+                ffmpeg.setProgress(({ ratio }) => {
+                    prog.style.display = 'block';
+                    prog.value = ratio * 100;
+                    status.innerText = `PROCESSANDO: ${(ratio * 100).toFixed(0)}%`;
+                });
 
-            const data = ffmpeg.FS('readFile', 'output_file.mp4');
-            const blob = new Blob([data.buffer], { type: 'video/mp4' });
-            const url = URL.createObjectURL(blob);
-            
-            video.src = url;
-            video.style.display = "block";
-            
-            dlLink.href = url;
-            dlLink.download = "vhs_signal.mp4";
-            dlLink.style.display = "block";
-            
-            status.innerText = "SINAL RECONSTRUÍDO!";
-        } catch (e) {
-            status.innerText = "ERRO NO PROCESSAMENTO.";
-            console.error(e);
-        } finally {
-            btn.disabled = false;
-            ffmpeg.FS('unlink', 'input_file.mp4');
-            ffmpeg.FS('unlink', 'output_file.mp4');
-        }
-    };
-</script>
+                const slices = parseInt(document.getElementById('slices').value);
+                const delay = parseFloat(document.getElementById('delay').value);
+                const mode = document.getElementById('mode').value;
+                const bleed = document.getElementById('bleed').value;
+                const noise = document.getElementById('noise').value;
+
+                await ffmpeg.run(
+                    '-i', 'in.mp4', 
+                    '-vf', buildSuperFilter(slices, delay, mode, bleed, noise), 
+                    '-c:v', 'libx264', 
+                    '-profile:v', 'baseline',
+                    '-level', '3.0',
+                    '-pix_fmt', 'yuv420p',
+                    '-preset', 'ultrafast',
+                    '-threads', '1', 
+                    '-an', // Sem áudio para evitar erros de render no iPhone
+                    '-movflags', '+faststart',
+                    'out.mp4'
+                );
+
+                const data = ffmpeg.FS('readFile', 'out.mp4');
+                video.src = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
+                video.style.display = "block";
+                status.innerText = "SINAL RECONSTRUÍDO!";
+                
+                ffmpeg.FS('unlink', 'in.mp4');
+                ffmpeg.FS('unlink', 'out.mp4');
+
+            } catch (e) {
+                document.getElementById('status').innerText = "ERRO DE MEMÓRIA (REDUZA AS FATIAS)";
+                console.error(e);
+            } finally {
+                btn.disabled = false;
+                document.getElementById('progress').style.display = 'none';
+            }
+        };
+    </script>
 </body>
 </html>
