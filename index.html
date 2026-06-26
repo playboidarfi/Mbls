@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TimeSlice Engine - Feather Pro</title>
+    <title>TimeSlice Feather Pro</title>
     <script src="coi-serviceworker.js"></script>
     <style>
         :root { --blue: #0a84ff; --bg: #000; --card: #1c1c1e; }
@@ -34,7 +34,7 @@
         }
         button:disabled { background: #3a3a3c; color: #8e8e93; }
         #status { margin-top: 15px; font-size: 0.9rem; color: #32d74b; min-height: 1.2em; }
-        progress { width: 100%; height: 6px; margin-top: 15px; accent-color: var(--blue); }
+        progress { width: 100%; height: 6px; margin-top: 15px; accent-color: var(--blue); width: 100%; }
         video { width: 100%; margin-top: 20px; border-radius: 12px; display: none; background: #000; }
     </style>
 </head>
@@ -51,24 +51,24 @@
         <div style="display: flex; gap: 15px;">
             <div class="input-group" style="flex: 1;">
                 <label>Fatias</label>
-                <input type="number" id="slices" value="15" min="2" max="40">
+                <input type="number" id="slices" value="10" min="2" max="30">
             </div>
             <div class="input-group" style="flex: 1;">
                 <label>Atraso (s)</label>
-                <input type="number" id="delay" value="0.1" step="0.05">
+                <input type="number" id="delay" value="0.05" step="0.01">
             </div>
         </div>
 
         <div class="input-group">
-            <label>Suavização (Feather): <span id="feather-val">10</span></label>
-            <input type="range" id="feather" min="0" max="40" value="10" oninput="document.getElementById('feather-val').innerText = this.value">
+            <label>Intensidade Feather: <span id="feather-val">10</span></label>
+            <input type="range" id="feather" min="0" max="50" value="10" oninput="document.getElementById('feather-val').innerText = this.value">
         </div>
 
-        <button id="btn">GERAR COM FEATHER</button>
+        <button id="btn">GERAR VÍDEO</button>
         
         <div id="status">Pronto</div>
         <progress id="progress" value="0" max="100" style="display:none;"></progress>
-        <video id="outputVideo" controls playsinline></video>
+        <video id="outputVideo" controls playsinline webkit-playsinline></video>
     </div>
 
     <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
@@ -77,11 +77,11 @@
         const { createFFmpeg, fetchFile } = FFmpeg;
         const ffmpeg = createFFmpeg({ 
             corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js',
-            log: false 
+            log: true 
         });
 
         function buildFilter(numSlices, delayStep, featherAmount) {
-            // Reduz escala para evitar crash e inicia o split
+            // 1. Reduz escala para 720p (Obrigatório para o iPhone aguentar o Feather)
             let filter = `[0:v]scale=720:-1,split=${numSlices}`;
             let labels = "";
             for(let i=0; i<numSlices; i++) labels += `[v${i}]`;
@@ -94,17 +94,14 @@
                 stackLabels += `[s${i}]`;
             }
             
-            // Empilha as fatias
+            // 2. Empilha verticalmente
             filter += `${stackLabels}vstack=inputs=${numSlices}:shortest=1`;
 
-            // APLICAÇÃO DO FEATHER (Mágica acontece aqui)
+            // 3. Aplica Feather (avgblur vertical) + Sharpen (unsharp) para manter a qualidade
             if (featherAmount > 0) {
-                // 1. avgblur: Desfoca apenas no eixo VERTICAL (sizeh=0) para misturar as linhas
-                // 2. unsharp: Devolve a nitidez horizontal para o vídeo não ficar "lavado"
                 filter += `,avgblur=sizeh=0:sizev=${featherAmount},unsharp=5:5:1.0:5:5:0.0`;
             }
 
-            filter += `,format=yuv420p`;
             return filter;
         }
 
@@ -121,11 +118,11 @@
                 video.style.display = "none";
                 
                 if (!ffmpeg.isLoaded()) {
-                    status.innerText = "Carregando motor...";
+                    status.innerText = "Iniciando motor...";
                     await ffmpeg.load();
                 }
 
-                status.innerText = "Lendo arquivo...";
+                status.innerText = "Lendo vídeo...";
                 ffmpeg.FS('writeFile', 'in.mp4', await fetchFile(file));
 
                 ffmpeg.setProgress(({ ratio }) => {
@@ -138,22 +135,32 @@
                 const delay = parseFloat(document.getElementById('delay').value);
                 const feather = parseInt(document.getElementById('feather').value);
 
+                // COMANDO CORRIGIDO PARA COMPATIBILIDADE IPHONE:
+                // -pix_fmt yuv420p (Essencial)
+                // -profile:v baseline -level 3.0 (Máxima compatibilidade Safari)
+                // -movflags +faststart (Para carregar o vídeo instantaneamente)
                 await ffmpeg.run(
                     '-i', 'in.mp4', 
                     '-vf', buildFilter(slices, delay, feather), 
                     '-c:v', 'libx264', 
+                    '-profile:v', 'baseline',
+                    '-level', '3.0',
+                    '-pix_fmt', 'yuv420p',
                     '-preset', 'ultrafast',
                     '-threads', '1', 
+                    '-movflags', '+faststart',
+                    '-an', // Remove áudio para evitar erros de sincronia no vstack
                     'out.mp4'
                 );
 
                 const data = ffmpeg.FS('readFile', 'out.mp4');
-                video.src = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
+                const blob = new Blob([data.buffer], { type: 'video/mp4' });
+                video.src = URL.createObjectURL(blob);
                 video.style.display = "block";
                 status.innerText = "Sucesso!";
 
             } catch (e) {
-                status.innerText = "Erro. Tente um vídeo menor.";
+                document.getElementById('status').innerText = "Erro. Tente um vídeo mais curto.";
                 console.error(e);
             } finally {
                 btn.disabled = false;
