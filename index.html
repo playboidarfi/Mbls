@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Signal Processor V1 - iOS Fixed</title>
+    <title>Signal Processor V1 - Final Fix</title>
     <script src="coi-serviceworker.js"></script>
     <style>
         :root { --vhs-green: #00ff41; --vhs-bg: #050505; }
@@ -23,9 +23,9 @@
             border: none; font-weight: bold; cursor: pointer; text-transform: uppercase;
         }
         button:disabled { background: #004411; color: #002200; }
-        #status { font-size: 0.7rem; margin-top: 15px; text-align: center; min-height: 1.2em; }
-        progress { width: 100%; height: 5px; accent-color: var(--vhs-green); margin-top: 10px; }
+        #status { font-size: 0.7rem; margin-top: 15px; text-align: center; color: #aaa; }
         video { width: 100%; margin-top: 20px; border: 1px solid #333; display: none; background: #000; }
+        #download-link { display: none; color: white; margin-top: 10px; text-decoration: underline; font-size: 0.8rem; }
     </style>
 </head>
 <body>
@@ -34,12 +34,12 @@
     <h1>SIGNAL_PROCESSOR_V1</h1>
     
     <div class="control">
-        <label>1. Inserir Fita</label>
+        <label>1. Carregar Vídeo</label>
         <input type="file" id="uploader" accept="video/*">
     </div>
 
     <div class="control">
-        <label>Chroma Bleed (Vazamento): <span id="bleed-val">6</span></label>
+        <label>Chroma Bleed: <span id="bleed-val">6</span></label>
         <input type="range" id="bleed" min="0" max="15" value="6" oninput="document.getElementById('bleed-val').innerText=this.value">
     </div>
 
@@ -49,15 +49,16 @@
     </div>
 
     <div class="control">
-        <label>Magnetic Noise: <span id="noise-val">12</span></label>
+        <label>Tape Noise: <span id="noise-val">12</span></label>
         <input type="range" id="noise" min="0" max="40" value="12" oninput="document.getElementById('noise-val').innerText=this.value">
     </div>
 
     <button id="btn">RECONSTRUCT SIGNAL</button>
-    <div id="status">IDLE...</div>
-    <progress id="progress" value="0" max="100" style="display:none;"></progress>
+    <div id="status">AGUARDANDO...</div>
     
-    <video id="outputVideo" controls playsinline webkit-playsinline></video>
+    <!-- Muted é importante para o Safari permitir o play automático de blobs -->
+    <video id="outputVideo" controls playsinline muted></video>
+    <a id="download-link">Baixar Vídeo Manualmente</a>
 </div>
 
 <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
@@ -66,26 +67,16 @@
     const { createFFmpeg, fetchFile } = FFmpeg;
     const ffmpeg = createFFmpeg({ 
         corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js',
-        log: false 
+        log: true 
     });
 
     function buildAnalogFilter(bleed, bandwidth, noise) {
-        // Motor de Sinal Analógico Otimizado para iOS
-        let f = `scale=480:-1,`; // Resolução SD para processamento rápido no iPhone
-        
-        // Simulação de YUV Split
+        // -2 garante que a largura seja 480 e a altura seja calculada como um número PAR (exigência do H.264)
+        let f = `scale=480:-2,`; 
         f += `format=yuv444p,boxblur=luma_radius=0:luma_power=1:chroma_radius=${bleed}:chroma_power=1,`;
-        
-        // Limite de Banda Horizontal
         if (bandwidth > 0) f += `avgblur=sizeh=${bandwidth}:sizev=0,`;
-        
-        // Ruído Magnético Temporal
         f += `noise=alls=${noise}:allf=t+u,`;
-        
-        // Head Switching (Barra inferior)
         f += `drawbox=y=ih-6:h=6:color=black@0.4:t=fill,`;
-        
-        // CONVERSÃO OBRIGATÓRIA PARA IPHONE (yuv420p)
         f += `format=yuv420p`;
         return f;
     }
@@ -97,52 +88,62 @@
         
         btn.disabled = true;
         const status = document.getElementById('status');
-        const prog = document.getElementById('progress');
         const video = document.getElementById('outputVideo');
+        const dlLink = document.getElementById('download-link');
+        
         video.style.display = "none";
+        dlLink.style.display = "none";
 
         if (!ffmpeg.isLoaded()) {
-            status.innerText = "LOADING ENGINE...";
+            status.innerText = "CARREGANDO MOTOR...";
             await ffmpeg.load();
         }
 
-        status.innerText = "READING SIGNAL...";
-        ffmpeg.FS('writeFile', 'in.mp4', await fetchFile(file));
+        status.innerText = "LENDO SINAL...";
+        ffmpeg.FS('writeFile', 'input_file.mp4', await fetchFile(file));
 
         const bleed = document.getElementById('bleed').value;
         const bw = document.getElementById('bandwidth').value;
         const ns = document.getElementById('noise').value;
 
-        ffmpeg.setProgress(({ ratio }) => {
-            prog.style.display = 'block';
-            prog.value = ratio * 100;
-            status.innerText = `RECONSTRUCTING: ${(ratio * 100).toFixed(0)}%`;
-        });
+        status.innerText = "RECONSTRUINDO... (AGUARDE)";
 
-        // FLAGS DE COMPATIBILIDADE IPHONE
-        await ffmpeg.run(
-            '-i', 'in.mp4',
-            '-vf', buildAnalogFilter(bleed, bw, ns),
-            '-c:v', 'libx264',
-            '-profile:v', 'baseline', // Compatível com qualquer iPhone
-            '-level', '3.0',
-            '-pix_fmt', 'yuv420p',    // OBRIGATÓRIO PARA PLAY NO SAFARI
-            '-preset', 'ultrafast',
-            '-threads', '1',
-            '-movflags', '+faststart', // Otimiza o play via web
-            'out.mp4'
-        );
+        try {
+            await ffmpeg.run(
+                '-i', 'input_file.mp4',
+                '-vf', buildAnalogFilter(bleed, bw, ns),
+                '-c:v', 'libx264',
+                '-preset', 'ultrafast',
+                '-tune', 'zerolatency',
+                '-profile:v', 'baseline', 
+                '-level', '3.0',
+                '-pix_fmt', 'yuv420p',
+                '-threads', '1',
+                '-an', // Removendo áudio para evitar erros de codec/sync que travam o Safari
+                '-movflags', '+faststart',
+                'output_file.mp4'
+            );
 
-        status.innerText = "SIGNAL RECONSTRUCTED.";
-        const data = ffmpeg.FS('readFile', 'out.mp4');
-        const blob = new Blob([data.buffer], { type: 'video/mp4' });
-        video.src = URL.createObjectURL(blob);
-        video.style.display = "block";
-        btn.disabled = false;
-        prog.style.display = 'none';
-        
-        ffmpeg.FS('unlink', 'in.mp4');
-        ffmpeg.FS('unlink', 'out.mp4');
+            const data = ffmpeg.FS('readFile', 'output_file.mp4');
+            const blob = new Blob([data.buffer], { type: 'video/mp4' });
+            const url = URL.createObjectURL(blob);
+            
+            video.src = url;
+            video.style.display = "block";
+            
+            dlLink.href = url;
+            dlLink.download = "vhs_signal.mp4";
+            dlLink.style.display = "block";
+            
+            status.innerText = "SINAL RECONSTRUÍDO!";
+        } catch (e) {
+            status.innerText = "ERRO NO PROCESSAMENTO.";
+            console.error(e);
+        } finally {
+            btn.disabled = false;
+            ffmpeg.FS('unlink', 'input_file.mp4');
+            ffmpeg.FS('unlink', 'output_file.mp4');
+        }
     };
 </script>
 </body>
