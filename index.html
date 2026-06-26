@@ -3,191 +3,133 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TimeSlice Engine Pro</title>
-    
-    <!-- OBRIGATÓRIO: coi-serviceworker.js deve estar na mesma pasta -->
+    <title>Signal Simulator Pro</title>
     <script src="coi-serviceworker.js"></script>
-    
     <style>
-        :root { --blue: #0a84ff; --bg: #000; --card: #1c1c1e; }
+        :root { --vhs-green: #00ff41; --vhs-bg: #050505; }
         body { 
-            font-family: -apple-system, system-ui, sans-serif;
-            background: var(--bg); color: white; 
-            display: flex; flex-direction: column; align-items: center; 
-            padding: 20px; margin: 0; min-height: 100vh;
+            background: var(--vhs-bg); color: var(--vhs-green); 
+            font-family: 'Courier New', monospace; padding: 20px;
+            display: flex; flex-direction: column; align-items: center;
         }
-        .card {
-            background: var(--card); padding: 25px; border-radius: 20px;
-            width: 100%; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-            text-align: center;
+        .container { width: 100%; max-width: 400px; border: 1px solid var(--vhs-green); padding: 20px; box-shadow: 0 0 15px rgba(0,255,65,0.2); }
+        h1 { font-size: 1.2rem; text-align: center; border-bottom: 1px solid var(--vhs-green); padding-bottom: 10px; }
+        .control { margin-bottom: 20px; }
+        label { display: block; font-size: 0.7rem; text-transform: uppercase; margin-bottom: 5px; }
+        input[type="range"] { width: 100%; accent-color: var(--vhs-green); background: #222; }
+        input[type="file"] { width: 100%; font-size: 0.7rem; margin-bottom: 20px; }
+        button { 
+            width: 100%; padding: 15px; background: var(--vhs-green); color: #000; 
+            border: none; font-weight: bold; cursor: pointer; text-transform: uppercase;
         }
-        h1 { font-size: 1.6rem; margin: 0; color: var(--blue); }
-        .badge { 
-            background: #32d74b; color: black; font-size: 0.7rem; 
-            padding: 2px 8px; border-radius: 10px; font-weight: bold;
-            display: inline-block; margin: 10px 0 20px 0;
-        }
-        .input-group { margin-bottom: 20px; text-align: left; }
-        label { display: block; font-size: 0.85rem; color: #8e8e93; margin-bottom: 8px; }
-        input[type="file"], input[type="number"], select {
-            width: 100%; padding: 12px; background: #2c2c2e;
-            border: 1px solid #3a3a3c; border-radius: 12px; color: white;
-            box-sizing: border-box; font-size: 1rem;
-            -webkit-appearance: none;
-        }
-        .checkbox-group { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
-        input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--blue); }
-        button {
-            width: 100%; padding: 16px; background: var(--blue);
-            border: none; border-radius: 12px; color: white;
-            font-weight: 600; font-size: 1rem; cursor: pointer;
-            transition: 0.2s;
-        }
-        button:disabled { background: #3a3a3c; color: #8e8e93; opacity: 0.6; }
-        #status { margin-top: 15px; font-size: 0.9rem; color: #32d74b; }
-        progress { width: 100%; height: 6px; margin-top: 15px; accent-color: var(--blue); }
-        video { width: 100%; margin-top: 20px; border-radius: 12px; display: none; background: #000; }
+        button:disabled { background: #004411; color: #002200; }
+        #status { font-size: 0.7rem; margin-top: 15px; text-align: center; }
+        video { width: 100%; margin-top: 20px; border: 1px solid #333; display: none; }
     </style>
 </head>
 <body>
 
-    <div class="card">
-        <h1>TimeSlice Engine</h1>
-        <div class="badge">MULTI-THREAD ATIVADO</div>
-        
-        <div class="input-group">
-            <label>Vídeo de Entrada</label>
-            <input type="file" id="uploader" accept="video/*" />
-        </div>
+<div class="container">
+    <h1>SIGNAL_PROCESSOR_V1</h1>
+    
+    <input type="file" id="uploader" accept="video/*">
 
-        <div style="display: flex; gap: 15px;">
-            <div class="input-group" style="flex: 1;">
-                <label>Fatias</label>
-                <input type="number" id="slices" value="12" min="2" max="40">
-            </div>
-            <div class="input-group" style="flex: 1;">
-                <label>Atraso (s)</label>
-                <input type="number" id="delay" value="0.05" step="0.01">
-            </div>
-        </div>
-
-        <div class="input-group">
-            <label>Orientação das Fatias</label>
-            <select id="orientation">
-                <option value="horizontal">Horizontal (Cortes Deitados)</option>
-                <option value="vertical">Vertical (Cortes em Pé)</option>
-            </select>
-        </div>
-
-        <div class="checkbox-group">
-            <input type="checkbox" id="invert">
-            <label style="margin-bottom:0">Inverter Fluxo Temporal</label>
-        </div>
-
-        <button id="btn">GERAR VÍDEO</button>
-        
-        <div id="status">Aguardando arquivo...</div>
-        <progress id="progress" value="0" max="100" style="display:none;"></progress>
-        <video id="outputVideo" controls playsinline></video>
+    <div class="control">
+        <label>Chroma Bleed (Vazamento U/V): <span id="bleed-val">6</span></label>
+        <input type="range" id="bleed" min="0" max="15" value="6">
     </div>
 
-    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
-    
-    <script>
-        const { createFFmpeg, fetchFile } = FFmpeg;
-        
-        const ffmpeg = createFFmpeg({ 
-            corePath: 'https://unpkg.com/@ffmpeg/core-mt@0.11.0/dist/ffmpeg-core.js',
-            log: true 
-        });
+    <div class="control">
+        <label>Bandwidth (Lown-Pass Filter): <span id="bandwidth-val">4</span></label>
+        <input type="range" id="bandwidth" min="0" max="10" value="4">
+    </div>
 
-        function buildFilter(numSlices, delayStep, orientation, invert) {
-            let filter = `[0:v]scale=720:-1,split=${numSlices}`;
-            let labels = "";
-            for(let i=0; i<numSlices; i++) labels += `[v${i}]`;
-            filter += `${labels};`;
+    <div class="control">
+        <label>Tape Noise (Magnetic interference): <span id="noise-val">12</span></label>
+        <input type="range" id="noise" min="0" max="40" value="12">
+    </div>
 
-            let stackLabels = "";
-            for(let i=0; i<numSlices; i++) {
-                let sliceIdx = invert ? (numSlices - 1 - i) : i;
-                let startTrim = (sliceIdx * delayStep).toFixed(2);
-                
-                if (orientation === "horizontal") {
-                    // Corte Horizontal (empilha com vstack)
-                    filter += `[v${i}]crop=iw:ih/${numSlices}:0:ih/${numSlices}*${i},`;
-                } else {
-                    // Corte Vertical (empilha com hstack)
-                    filter += `[v${i}]crop=iw/${numSlices}:ih:iw/${numSlices}*${i}:0,`;
-                }
-                
-                filter += `trim=start=${startTrim},setpts=PTS-STARTPTS[s${i}];`;
-                stackLabels += `[s${i}]`;
-            }
-            
-            const stackMode = orientation === "horizontal" ? "vstack" : "hstack";
-            filter += `${stackLabels}${stackMode}=inputs=${numSlices}:shortest=1,format=yuv420p`;
-            return filter;
+    <button id="btn">RECONSTRUCT SIGNAL</button>
+    <div id="status">IDLE...</div>
+    <video id="outputVideo" controls playsinline></video>
+</div>
+
+<script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+
+<script>
+    const { createFFmpeg, fetchFile } = FFmpeg;
+    const ffmpeg = createFFmpeg({ 
+        corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js',
+        log: false 
+    });
+
+    // Função que reconstrói a imagem baseada em sinal analógico
+    function buildAnalogFilter(bleed, bandwidth, noise) {
+        // 1. Redução para resolução NTSC (Simulando a largura de banda da fita)
+        let f = `scale=640:480,`;
+
+        // 2. Separação YUV e Chroma Bleed (Passo 1 do Signal)
+        // Desfocamos apenas os canais U e V (cor) mantendo o Y (brilho) nítido
+        f += `format=yuv444p,boxblur=luma_radius=0:luma_power=1:chroma_radius=${bleed}:chroma_power=1,`;
+
+        // 3. Bandwidth Control (Passo 4 do Signal)
+        // Usamos um desfoque apenas horizontal (sizeh) para simular o limite de dados por linha
+        if (bandwidth > 0) {
+            f += `avgblur=sizeh=${bandwidth}:sizev=0,`;
         }
 
-        const btn = document.getElementById('btn');
-        btn.onclick = async () => {
-            const file = document.getElementById('uploader').files[0];
-            if (!file) return alert("Selecione um vídeo!");
+        // 4. Modulação e Ruído Magnético (Passo 3 do Signal)
+        // noise=allf=t: Simula ruído que muda a cada frame (temporal)
+        f += `noise=alls=${noise}:allf=t+u,`;
 
-            try {
-                btn.disabled = true;
-                const status = document.getElementById('status');
-                const prog = document.getElementById('progress');
-                const video = document.getElementById('outputVideo');
-                video.style.display = "none";
-                
-                if (!ffmpeg.isLoaded()) {
-                    status.innerText = "Iniciando motor multi-core...";
-                    await ffmpeg.load();
-                }
+        // 5. Simulação de Head Switching (A barra distorcida no rodapé)
+        // Cortamos 8 pixels do fundo e substituímos por ruído puro
+        f += `drawbox=y=ih-8:h=8:color=black@0.5:t=fill,`;
 
-                status.innerText = "Processando vídeo...";
-                ffmpeg.FS('writeFile', 'in.mp4', await fetchFile(file));
+        // Finalização
+        f += `hue=s=0.9,format=yuv420p`;
+        return f;
+    }
 
-                ffmpeg.setProgress(({ ratio }) => {
-                    prog.style.display = 'block';
-                    prog.value = ratio * 100;
-                    status.innerText = `Renderizando: ${(ratio * 100).toFixed(0)}%`;
-                });
+    const btn = document.getElementById('btn');
+    btn.onclick = async () => {
+        const file = document.getElementById('uploader').files[0];
+        if (!file) return;
+        
+        btn.disabled = true;
+        const status = document.getElementById('status');
+        if (!ffmpeg.isLoaded()) await ffmpeg.load();
 
-                const slices = parseInt(document.getElementById('slices').value);
-                const delay = parseFloat(document.getElementById('delay').value);
-                const orientation = document.getElementById('orientation').value;
-                const invert = document.getElementById('invert').checked;
+        status.innerText = "ENCODING SIGNAL...";
+        ffmpeg.FS('writeFile', 'in.mp4', await fetchFile(file));
 
-                await ffmpeg.run(
-                    '-i', 'in.mp4', 
-                    '-vf', buildFilter(slices, delay, orientation, invert), 
-                    '-c:v', 'libx264', 
-                    '-preset', 'ultrafast',
-                    '-profile:v', 'baseline',
-                    '-level', '3.0',
-                    '-pix_fmt', 'yuv420p',
-                    '-an',
-                    'out.mp4'
-                );
+        const bleed = document.getElementById('bleed').value;
+        const bw = document.getElementById('bandwidth').value;
+        const ns = document.getElementById('noise').value;
 
-                const data = ffmpeg.FS('readFile', 'out.mp4');
-                video.src = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
-                video.style.display = "block";
-                status.innerText = "Sucesso!";
+        await ffmpeg.run(
+            '-i', 'in.mp4',
+            '-vf', buildAnalogFilter(bleed, bw, ns),
+            '-c:v', 'libx264',
+            '-preset', 'ultrafast',
+            '-threads', '1',
+            'out.mp4'
+        );
 
-                ffmpeg.FS('unlink', 'in.mp4');
-                ffmpeg.FS('unlink', 'out.mp4');
+        const data = ffmpeg.FS('readFile', 'out.mp4');
+        const video = document.getElementById('outputVideo');
+        video.src = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
+        video.style.display = "block";
+        status.innerText = "SIGNAL RECONSTRUCTED.";
+        btn.disabled = false;
+    };
 
-            } catch (e) {
-                status.innerText = "Erro no processamento.";
-                console.error(e);
-            } finally {
-                btn.disabled = false;
-                document.getElementById('progress').style.display = 'none';
-            }
-        };
-    </script>
+    // Atualizadores de label
+    ['bleed','bandwidth','noise'].forEach(id => {
+        document.getElementById(id).oninput = (e) => {
+            document.getElementById(id+'-val').innerText = e.target.value;
+        }
+    });
+</script>
 </body>
 </html>
