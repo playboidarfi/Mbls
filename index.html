@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TimeSlice Engine - Feather Edition</title>
+    <title>TimeSlice Engine - Feather Pro</title>
     <script src="coi-serviceworker.js"></script>
     <style>
         :root { --blue: #0a84ff; --bg: #000; --card: #1c1c1e; }
@@ -50,7 +50,7 @@
 
         <div style="display: flex; gap: 15px;">
             <div class="input-group" style="flex: 1;">
-                <label>Fatias (Slices)</label>
+                <label>Fatias</label>
                 <input type="number" id="slices" value="15" min="2" max="40">
             </div>
             <div class="input-group" style="flex: 1;">
@@ -60,11 +60,11 @@
         </div>
 
         <div class="input-group">
-            <label>Suavização (Feather): <span id="feather-val">2</span></label>
-            <input type="range" id="feather" min="0" max="20" value="2" oninput="document.getElementById('feather-val').innerText = this.value">
+            <label>Suavização (Feather): <span id="feather-val">10</span></label>
+            <input type="range" id="feather" min="0" max="40" value="10" oninput="document.getElementById('feather-val').innerText = this.value">
         </div>
 
-        <button id="btn">GERAR TIME SLICE</button>
+        <button id="btn">GERAR COM FEATHER</button>
         
         <div id="status">Pronto</div>
         <progress id="progress" value="0" max="100" style="display:none;"></progress>
@@ -81,7 +81,7 @@
         });
 
         function buildFilter(numSlices, delayStep, featherAmount) {
-            // Primeiro reduzimos para 720p para garantir que o iPhone aguente o processamento
+            // Reduz escala para evitar crash e inicia o split
             let filter = `[0:v]scale=720:-1,split=${numSlices}`;
             let labels = "";
             for(let i=0; i<numSlices; i++) labels += `[v${i}]`;
@@ -97,10 +97,11 @@
             // Empilha as fatias
             filter += `${stackLabels}vstack=inputs=${numSlices}:shortest=1`;
 
-            // APLICAÇÃO DO FEATHER (Suavização de borda)
-            // Usamos boxblur apenas no eixo vertical (Y) para misturar as emendas
+            // APLICAÇÃO DO FEATHER (Mágica acontece aqui)
             if (featherAmount > 0) {
-                filter += `,boxblur=0:${featherAmount}`;
+                // 1. avgblur: Desfoca apenas no eixo VERTICAL (sizeh=0) para misturar as linhas
+                // 2. unsharp: Devolve a nitidez horizontal para o vídeo não ficar "lavado"
+                filter += `,avgblur=sizeh=0:sizev=${featherAmount},unsharp=5:5:1.0:5:5:0.0`;
             }
 
             filter += `,format=yuv420p`;
@@ -120,7 +121,7 @@
                 video.style.display = "none";
                 
                 if (!ffmpeg.isLoaded()) {
-                    status.innerText = "Iniciando...";
+                    status.innerText = "Carregando motor...";
                     await ffmpeg.load();
                 }
 
@@ -149,10 +150,10 @@
                 const data = ffmpeg.FS('readFile', 'out.mp4');
                 video.src = URL.createObjectURL(new Blob([data.buffer], { type: 'video/mp4' }));
                 video.style.display = "block";
-                status.innerText = "Concluído!";
+                status.innerText = "Sucesso!";
 
             } catch (e) {
-                document.getElementById('status').innerText = "Erro no processamento.";
+                status.innerText = "Erro. Tente um vídeo menor.";
                 console.error(e);
             } finally {
                 btn.disabled = false;
